@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: #FAFAF8;
+  color: #231F1A;
+}
+
+/* ---- Print / Cartelera rules ---- */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #cartelera-print, #cartelera-print * {
+    visibility: visible;
+  }
+  #cartelera-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .page-break {
+    break-after: page;
+  }
+}
