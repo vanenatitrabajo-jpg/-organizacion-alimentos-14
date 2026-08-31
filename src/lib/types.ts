@@ -127,10 +127,16 @@ export const GRUPO_LABEL: Record<Grupo, string> = {
 export const GRUPO_ORDEN: Grupo[] = ['manana', 'office', 'menu', 'noche']
 
 /** Clases de Tailwind por grupo — verde / azul / naranja / violeta, como pediste. */
-export const GRUPO_COLOR_CLASSES: Record
-  Grupo,
-  { bg: string; text: string; border: string; header: string; fill: string; font: string }
-> = {
+interface GrupoEstilo {
+  bg: string
+  text: string
+  border: string
+  header: string
+  fill: string
+  font: string
+}
+
+export const GRUPO_COLOR_CLASSES: Record<Grupo, GrupoEstilo> = {
   manana: {
     bg: 'bg-emerald-50',
     text: 'text-emerald-700',
