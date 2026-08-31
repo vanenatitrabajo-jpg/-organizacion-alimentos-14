@@ -5,7 +5,7 @@ import {
   CalendarDays,
   CalendarRange,
   Users,
-  Shuffle,
+  Grid3x3,
   Settings2,
   BarChart3,
   History,
@@ -19,9 +19,8 @@ const nav = [
   { to: '/importar', label: 'Importar organización', icon: Upload },
   { to: '/semanal', label: 'Organización semanal', icon: CalendarDays },
   { to: '/mensual', label: 'Organización mensual', icon: CalendarRange },
-  { to: '/personal-fijo', label: 'Personal fijo', icon: Users },
-  { to: '/personal-variable', label: 'Personal variable', icon: Shuffle },
-  { to: '/reglas', label: 'Reglas y configuración', icon: Settings2 },
+  { to: '/personal-alimentos', label: 'Personal de Alimentos', icon: Users },
+  { to: '/puestos', label: 'Puestos', icon: Grid3x3 },
   { to: '/reportes', label: 'Reportes', icon: BarChart3 },
   { to: '/historial', label: 'Historial', icon: History },
 ]
@@ -50,9 +49,7 @@ export default function Layout() {
               end={end}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-cocina-50 text-cocina-600'
-                    : 'text-ink-700 hover:bg-base-100'
+                  isActive ? 'bg-cocina-50 text-cocina-600' : 'text-ink-700 hover:bg-base-100'
                 }`
               }
             >
