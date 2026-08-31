@@ -7,21 +7,13 @@ import {
   CheckCircle2,
   AlertTriangle,
   AlertCircle,
-  Circle,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { parsearExcel } from '../lib/excelParser'
 import { generarAsignaciones } from '../lib/motor'
 import { useOrgStore } from '../lib/store'
-import { AsignacionVariable, Asignacion, Persona, Regla, SECTOR_LABEL } from '../lib/types'
+import { AsignacionGenerada, Persona, Puesto, GRUPO_LABEL } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
-
-const INDICADOR: Record<Asignacion['estado'], { icon: typeof Circle; color: string; label: string }> = {
-  fijo: { icon: CheckCircle2, color: 'text-office-600', label: 'Asignación fija' },
-  regla: { icon: CheckCircle2, color: 'text-cocina-600', label: 'Asignación automática (regla)' },
-  revision: { icon: AlertTriangle, color: 'text-amber-500', label: 'Revisión necesaria' },
-  conflicto: { icon: AlertCircle, color: 'text-red-600', label: 'Conflicto' },
-}
 
 export default function Importar() {
   const navigate = useNavigate()
@@ -31,8 +23,9 @@ export default function Importar() {
   const [archivo, setArchivo] = useState<File | null>(null)
   const [procesando, setProcesando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [asignaciones, setAsignaciones] = useState<Asignacion[] | null>(null)
+  const [asignaciones, setAsignaciones] = useState<AsignacionGenerada[] | null>(null)
   const [guardando, setGuardando] = useState(false)
+  const [tipo, setTipo] = useState<'semanal' | 'mensual'>('semanal')
 
   const resumen = useMemo(() => {
     if (!asignaciones) return null
@@ -41,9 +34,9 @@ export default function Importar() {
     return {
       dias: fechas.size,
       personas: nombres.size,
-      automaticas: asignaciones.filter((a) => a.estado === 'fijo' || a.estado === 'regla').length,
-      revisiones: asignaciones.filter((a) => a.estado === 'revision').length,
-      conflictos: asignaciones.filter((a) => a.estado === 'conflicto').length,
+      automaticas: asignaciones.filter((a) => !a.conflicto).length,
+      conflictos: asignaciones.filter((a) => a.conflicto).length,
+      sinPreferencias: asignaciones.filter((a) => a.sinPreferenciasCargadas).length,
     }
   }, [asignaciones])
 
@@ -65,17 +58,15 @@ export default function Importar() {
         return
       }
 
-      const [personasRes, variablesRes, reglasRes] = await Promise.all([
+      const [personasRes, puestosRes] = await Promise.all([
         supabase.from('personas').select('*'),
-        supabase.from('asignaciones_variables').select('*'),
-        supabase.from('reglas').select('*'),
+        supabase.from('puestos').select('*').eq('activo', true),
       ])
 
       const personas = (personasRes.data ?? []) as Persona[]
-      const variables = (variablesRes.data ?? []) as AsignacionVariable[]
-      const reglas = (reglasRes.data ?? []) as Regla[]
+      const puestos = (puestosRes.data ?? []) as Puesto[]
 
-      const generadas = generarAsignaciones(filas, personas, variables, reglas)
+      const generadas = generarAsignaciones(filas, personas, puestos)
       setAsignaciones(generadas)
     } catch {
       setError('No se pudo leer el archivo. Verificá que sea un Excel (.xlsx) válido.')
@@ -97,22 +88,23 @@ export default function Importar() {
 
   async function confirmarYVerOrganizacion(guardarEnHistorial: boolean) {
     if (!asignaciones || asignaciones.length === 0) return
-    const fechas = asignaciones.map((a) => a.fecha).filter(Boolean) as string[]
+    const fechas = asignaciones.map((a) => a.fecha).filter(Boolean)
     const fechaInicio = fechas.length ? fechas.sort()[0] : new Date().toISOString().slice(0, 10)
     const fechaFin = fechas.length ? fechas.sort().slice(-1)[0] : fechaInicio
 
     const org = {
-      tipo: 'semanal' as const,
+      tipo,
       fechaInicio,
       fechaFin,
       archivoOrigen: archivo?.name ?? 'archivo.xlsx',
       asignaciones,
+      notasPorDia: {},
       resumen: {
         diasEncontrados: resumen?.dias ?? 0,
         personasEncontradas: resumen?.personas ?? 0,
         asignacionesAutomaticas: resumen?.automaticas ?? 0,
-        revisionesNecesarias: resumen?.revisiones ?? 0,
         conflictos: resumen?.conflictos ?? 0,
+        sinPreferencias: resumen?.sinPreferencias ?? 0,
       },
     }
 
@@ -131,10 +123,11 @@ export default function Importar() {
         .single()
       setGuardando(false)
       setActual({ ...org, id: data?.id })
-      navigate(data?.id ? `/semanal?id=${data.id}` : '/semanal')
+      const destino = tipo === 'mensual' ? '/mensual' : '/semanal'
+      navigate(data?.id ? `${destino}?id=${data.id}` : destino)
     } else {
       setActual(org)
-      navigate('/semanal')
+      navigate(tipo === 'mensual' ? '/mensual' : '/semanal')
     }
   }
 
@@ -143,10 +136,27 @@ export default function Importar() {
       <div className="mb-8">
         <h1 className="font-display text-2xl font-bold text-ink-900">Importar organización</h1>
         <p className="text-ink-500 mt-1">
-          Subí la planilla general del personal. El sistema detecta automáticamente a quienes
-          están en Alimentos, cruza con Personal fijo/variable y aplica las reglas configuradas.
+          Subí la planilla general del establecimiento. El sistema detecta automáticamente a
+          quienes están en Alimentos y los ubica en su puesto según sus preferencias.
         </p>
       </div>
+
+      {!asignaciones && (
+        <div className="mb-4 flex gap-2 no-print">
+          {(['semanal', 'mensual'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTipo(t)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                tipo === t ? 'bg-ink-900 text-white border-ink-900' : 'bg-white text-ink-700 border-base-300'
+              }`}
+            >
+              Generar {t}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!asignaciones && (
         <div
@@ -195,36 +205,38 @@ export default function Importar() {
               <FileSpreadsheet size={17} className="text-ink-700" />
               <p className="font-medium text-ink-900 text-sm">{archivo?.name}</p>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <Stat label="Días encontrados" value={resumen.dias} />
               <Stat label="Personas" value={resumen.personas} />
-              <Stat label="Automáticas" value={resumen.automaticas} tint="text-office-600" />
-              <Stat label="Revisiones" value={resumen.revisiones} tint="text-amber-500" />
-              <Stat label="Conflictos" value={resumen.conflictos} tint="text-red-600" />
+              <Stat label="Ubicadas automáticamente" value={resumen.automaticas} tint="text-office-600" />
+              <Stat label="A revisar" value={resumen.conflictos} tint="text-red-600" />
             </div>
           </div>
 
           <div className="bg-white rounded-xl2 shadow-soft divide-y divide-base-200 overflow-hidden mb-6 max-h-[420px] overflow-y-auto">
-            {asignaciones.map((a) => {
-              const Ind = INDICADOR[a.estado]
-              return (
-                <div key={a.id} className="flex items-start gap-3 px-5 py-3">
-                  <Ind.icon size={16} className={`shrink-0 mt-0.5 ${Ind.color}`} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-ink-900">
-                      {a.nombre}
-                      {a.sector && (
-                        <span className="ml-2 text-xs font-medium text-ink-500">{SECTOR_LABEL[a.sector]}</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-ink-500 mt-0.5">
-                      {a.fecha ? formatFechaLarga(a.fecha) : 'Fecha sin detectar'}
-                      {a.horario ? ` · ${a.horario}` : ''} — {a.motivo}
-                    </p>
-                  </div>
+            {asignaciones.map((a) => (
+              <div key={a.id} className="flex items-start gap-3 px-5 py-3">
+                {a.conflicto ? (
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-500" />
+                ) : (
+                  <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-office-600" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ink-900">
+                    {a.nombre}
+                    {a.puestoNombre && a.grupo && (
+                      <span className="ml-2 text-xs font-medium text-ink-500">
+                        {a.puestoNombre} · {GRUPO_LABEL[a.grupo]}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-ink-500 mt-0.5">
+                    {formatFechaLarga(a.fecha)}
+                    {a.observaciones ? ` — ${a.observaciones}` : ''}
+                  </p>
                 </div>
-              )
-            })}
+              </div>
+            ))}
           </div>
 
           <div className="flex flex-wrap gap-3">
