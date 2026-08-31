@@ -105,6 +105,7 @@ export default function Importar() {
         asignacionesAutomaticas: resumen?.automaticas ?? 0,
         conflictos: resumen?.conflictos ?? 0,
         sinPreferencias: resumen?.sinPreferencias ?? 0,
+        revisionesNecesarias: 0,
       },
     }
 
