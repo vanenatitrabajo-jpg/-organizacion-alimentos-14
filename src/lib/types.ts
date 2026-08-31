@@ -112,6 +112,8 @@ export interface OrganizacionGenerada {
     asignacionesAutomaticas: number
     conflictos: number
     sinPreferencias: number
+    /** @deprecated se mantiene en 0 — la pantalla "Inicio" vieja todavía lo lee */
+    revisionesNecesarias: number
   }
 }
 
@@ -125,7 +127,7 @@ export const GRUPO_LABEL: Record<Grupo, string> = {
 export const GRUPO_ORDEN: Grupo[] = ['manana', 'office', 'menu', 'noche']
 
 /** Clases de Tailwind por grupo — verde / azul / naranja / violeta, como pediste. */
-export const GRUPO_COLOR_CLASSES: Record<
+export const GRUPO_COLOR_CLASSES: Record
   Grupo,
   { bg: string; text: string; border: string; header: string; fill: string; font: string }
 > = {
