@@ -7,9 +7,8 @@ import Inicio from './pages/Inicio'
 import Importar from './pages/Importar'
 import Semanal from './pages/Semanal'
 import Mensual from './pages/Mensual'
-import PersonalFijo from './pages/PersonalFijo'
-import PersonalVariable from './pages/PersonalVariable'
-import Reglas from './pages/Reglas'
+import PersonalAlimentos from './pages/PersonalAlimentos'
+import Puestos from './pages/Puestos'
 import Reportes from './pages/Reportes'
 import Historial from './pages/Historial'
 import Configuracion from './pages/Configuracion'
@@ -37,12 +36,15 @@ export default function App() {
               <Route path="importar" element={<Importar />} />
               <Route path="semanal" element={<Semanal />} />
               <Route path="mensual" element={<Mensual />} />
-              <Route path="personal-fijo" element={<PersonalFijo />} />
-              <Route path="personal-variable" element={<PersonalVariable />} />
-              <Route path="reglas" element={<Reglas />} />
+              <Route path="personal-alimentos" element={<PersonalAlimentos />} />
+              <Route path="puestos" element={<Puestos />} />
               <Route path="reportes" element={<Reportes />} />
               <Route path="historial" element={<Historial />} />
               <Route path="configuracion" element={<Configuracion />} />
+              {/* Rutas viejas — redirigen a las nuevas para no romper links guardados */}
+              <Route path="personal-fijo" element={<Navigate to="/personal-alimentos" replace />} />
+              <Route path="personal-variable" element={<Navigate to="/personal-alimentos" replace />} />
+              <Route path="reglas" element={<Navigate to="/puestos" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
