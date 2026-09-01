@@ -1,17 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import {
-  Home,
-  Upload,
-  CalendarDays,
-  CalendarRange,
-  Users,
-  Grid3x3,
-  Settings2,
-  BarChart3,
-  History,
-  UtensilsCrossed,
-  LogOut,
-} from 'lucide-react'
+import { Home, Upload, CalendarDays, CalendarRange, Users, Settings2, BarChart3, History, UtensilsCrossed, LogOut } from 'lucide-react'
 import { useAuth } from '../lib/AuthContext'
 
 const nav = [
@@ -20,7 +8,6 @@ const nav = [
   { to: '/semanal', label: 'Organización semanal', icon: CalendarDays },
   { to: '/mensual', label: 'Organización mensual', icon: CalendarRange },
   { to: '/personal-alimentos', label: 'Personal de Alimentos', icon: Users },
-  { to: '/puestos', label: 'Puestos', icon: Grid3x3 },
   { to: '/reportes', label: 'Reportes', icon: BarChart3 },
   { to: '/historial', label: 'Historial', icon: History },
 ]
