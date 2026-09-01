@@ -53,3 +53,56 @@ export async function exportarExcel(
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } }
+    cell.alignment = { vertical: 'middle', horizontal: 'center' }
+    cell.border = thinBorder()
+  })
+  headerRow.height = 22
+
+  for (const fecha of dias) {
+    const delDia = asignaciones.filter((a) => a.fecha === fecha)
+    const horarios = Array.from(new Set(delDia.map((a) => a.horarioTexto))).sort(compararHorarios)
+
+    let primeraFilaDelDia = true
+    for (const horario of horarios) {
+      for (const categoria of CATEGORIA_ORDEN) {
+        const deEsteGrupo = delDia.filter((a) => a.horarioTexto === horario && a.categoria === categoria)
+        if (deEsteGrupo.length === 0) continue
+
+        const estilo = CATEGORIA_COLOR_CLASSES[categoria]
+        const personal = deEsteGrupo.map((a) => a.nombre).join(', ')
+
+        const row = ws.addRow([
+          primeraFilaDelDia ? formatFechaLarga(fecha).toUpperCase() : '',
+          horario,
+          CATEGORIA_LABEL[categoria],
+          personal,
+        ])
+        row.height = 18
+
+        row.eachCell((cell, colNumber) => {
+          cell.border = thinBorder()
+          cell.alignment = { vertical: 'middle', horizontal: colNumber <= 3 ? 'center' : 'left', wrapText: true }
+          if (colNumber === 1) cell.font = { bold: true, size: 11 }
+          if (colNumber === 3) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: estilo.fill } }
+            cell.font = { color: { argb: estilo.font }, bold: true, size: 10 }
+          }
+        })
+
+        primeraFilaDelDia = false
+      }
+    }
+  }
+
+  ws.pageSetup.printArea = `A1:D${ws.rowCount}`
+  ws.pageSetup.horizontalCentered = true
+
+  const buffer = await wb.xlsx.writeBuffer()
+  const nombreArchivo = `organizacion-alimentos_${fechaInicio}_${fechaFin}.xlsx`
+  saveAs(new Blob([buffer], { type: 'application/octet-stream' }), nombreArchivo)
+}
+
+function thinBorder() {
+  const style = { style: 'thin' as const, color: { argb: 'FFE7E5DE' } }
+  return { top: style, left: style, bottom: style, right: style }
+}
