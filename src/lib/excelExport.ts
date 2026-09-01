@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs'
 import { saveAs } from 'file-saver'
-import { AsignacionGenerada } from './types'
+import { AsignacionGenerada, CATEGORIA_LABEL, CATEGORIA_ORDEN } from './types'
 import { formatFechaLarga } from './dateUtils'
 import { compararHorarios } from './motor'
 
@@ -47,9 +47,9 @@ export async function exportarExcel(
 
   ws.addRow([])
 
-  ws.columns = [{ width: 13 }, { width: 12 }, { width: 30 }, { width: 30 }]
+  ws.columns = [{ width: 12 }, { width: 13 }, { width: 11 }, { width: 42 }]
 
-  const headerRow = ws.addRow(['DÍA', 'HORARIO', 'MENÚ', 'OFFICE'])
+  const headerRow = ws.addRow(['DÍA', 'HORARIO', 'SERVICIO', 'PERSONAL'])
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 }
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NEGRO } }
@@ -64,33 +64,45 @@ export async function exportarExcel(
     const horarios = Array.from(new Set(delDia.map((a) => a.horarioTexto))).sort(compararHorarios)
     alternar = !alternar
 
-    let primeraFilaDelDia = true
     const filaInicioDia = ws.rowCount + 1
+    let primeraFilaDelDia = true
 
     for (const horario of horarios) {
-      const menu = delDia
-        .filter((a) => a.horarioTexto === horario && a.categoria === 'menu')
-        .map((a) => a.nombre)
-        .join(', ')
-      const office = delDia
-        .filter((a) => a.horarioTexto === horario && a.categoria === 'office')
-        .map((a) => a.nombre)
-        .join(', ')
+      const filaInicioHorario = ws.rowCount + 1
+      let primeraFilaDelHorario = true
 
-      const row = ws.addRow([primeraFilaDelDia ? formatFechaLarga(fecha).toUpperCase() : '', horario, menu || '—', office || '—'])
-      row.height = 14
+      for (const categoria of CATEGORIA_ORDEN) {
+        const deEsteGrupo = delDia.filter((a) => a.horarioTexto === horario && a.categoria === categoria)
+        if (deEsteGrupo.length === 0) continue
 
-      row.eachCell((cell, colNumber) => {
-        cell.border = thinBorder()
-        cell.alignment = { vertical: 'middle', horizontal: colNumber <= 2 ? 'center' : 'left', wrapText: true }
-        cell.font = { size: 8, bold: colNumber === 1, color: { argb: NEGRO } }
-        if (alternar) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_CLARO } }
-      })
+        const personal = deEsteGrupo.map((a) => a.nombre).join(', ')
 
-      primeraFilaDelDia = false
+        const row = ws.addRow([
+          primeraFilaDelDia ? formatFechaLarga(fecha).toUpperCase() : '',
+          primeraFilaDelHorario ? horario : '',
+          CATEGORIA_LABEL[categoria],
+          personal,
+        ])
+        row.height = 14
+
+        row.eachCell((cell, colNumber) => {
+          cell.border = thinBorder()
+          cell.alignment = { vertical: 'middle', horizontal: colNumber <= 3 ? 'center' : 'left', wrapText: true }
+          cell.font = { size: 8, bold: colNumber <= 2, color: { argb: NEGRO } }
+          if (alternar) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_CLARO } }
+        })
+
+        primeraFilaDelDia = false
+        primeraFilaDelHorario = false
+      }
+
+      if (ws.rowCount > filaInicioHorario) {
+        ws.mergeCells(`B${filaInicioHorario}:B${ws.rowCount}`)
+        ws.getCell(`B${filaInicioHorario}`).alignment = { vertical: 'middle', horizontal: 'center' }
+      }
     }
 
-    if (horarios.length > 1) {
+    if (ws.rowCount > filaInicioDia) {
       ws.mergeCells(`A${filaInicioDia}:A${ws.rowCount}`)
       ws.getCell(`A${filaInicioDia}`).alignment = { vertical: 'middle', horizontal: 'center' }
     }
