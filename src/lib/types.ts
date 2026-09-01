@@ -31,70 +31,58 @@ export const SECTOR_LABEL: Record<Sector, string> = {
 }
 
 // ============================================================
-// Tipos nuevos — modelo de PUESTOS + PREFERENCIAS (prompt maestro)
+// Modelo final: solo 2 categorías, decididas por horario.
+//   Mañana (hasta 12:15) y Turno tarde (16:00-19:45)  -> Menú
+//   Turno mediodía (12:50-14:30) y Turno noche (20:15-21:35) -> Office
+// Sin puestos numerados: la cantidad de nombres por categoría
+// varía cada día.
 // ============================================================
-
-/** Los cuatro bloques del día. "manana" agrupa las Cocina 1-7. */
-export type Grupo = 'manana' | 'office' | 'menu' | 'noche'
+export type Categoria = 'menu' | 'office'
 
 export type Turno = 'manana' | 'tarde' | 'noche'
-
-export type Color = 'verde' | 'azul' | 'naranja' | 'violeta'
-
-export interface Puesto {
-  id: string
-  grupo: Grupo
-  nombre: string
-  color: Color
-  sort_order: number
-  activo: boolean
-}
 
 export interface Persona {
   id: string
   nombre: string
-  // legacy, ya no se completan desde la UI nueva pero siguen en la tabla:
+  /** Personal fijo: a qué categoría pertenece habitualmente. null = todavía sin clasificar. */
+  categoria_fija: Categoria | null
+  observaciones: string | null
+  activo: boolean
+  // columnas legacy de versiones anteriores del modelo, ya no se usan:
   sector: Sector | null
   puesto: string | null
   horario_habitual: string | null
   dias_habituales: string[] | null
   turno: Turno | null
   prioridad: number
-  observaciones: string | null
-  // nuevo modelo:
   puesto_principal_id: string | null
   puesto_segunda_id: string | null
   puesto_tercera_id: string | null
   es_fijo: boolean
-  activo: boolean
 }
 
-/** Una fila "Alimentos" cruda detectada en el Excel importado. */
+/** Una fila "Alimentos" cruda detectada en el Excel, una por persona por bloque horario. */
 export interface FilaCruda {
   id: string
   hoja: string
-  fila: number
-  fechaTexto: string | null
   fecha: string | null // ISO yyyy-mm-dd si se pudo resolver
   dia: string | null // Lunes, Martes...
-  horario: string | null
-  nombre: string | null
-  observacion: string | null
+  horarioTexto: string // ej "12:50 a 14:30"
+  nombreCrudo: string // tal cual apareció en la celda (puede traer horario embebido)
+  nombre: string // limpio, sin horario embebido
 }
 
-/** Una persona ya ubicada (o no) en un puesto concreto, un día concreto. */
+/** Una persona ya ubicada en Menú u Office, un día concreto. */
 export interface AsignacionGenerada {
   id: string
   fecha: string
   dia: string
   nombre: string
   personaId: string | null
-  puestoId: string | null
-  puestoNombre: string | null
-  grupo: Grupo | null
-  preferenciaUsada: 1 | 2 | 3 | null
-  conflicto: boolean
-  sinPreferenciasCargadas: boolean
+  categoria: Categoria
+  horarioTexto: string
+  /** true si el nombre no coincide con nadie en "Personal de Alimentos" — hay que revisar. */
+  esPersonaNueva: boolean
   observaciones: string | null
 }
 
@@ -109,25 +97,23 @@ export interface OrganizacionGenerada {
   resumen: {
     diasEncontrados: number
     personasEncontradas: number
+    personasNuevas: number
+    /** @deprecated — se mantienen en 0, por si "Inicio" u otra pantalla vieja los sigue leyendo */
     asignacionesAutomaticas: number
     conflictos: number
     sinPreferencias: number
-    /** @deprecated se mantiene en 0 — la pantalla "Inicio" vieja todavía lo lee */
     revisionesNecesarias: number
   }
 }
 
-export const GRUPO_LABEL: Record<Grupo, string> = {
-  manana: 'Mañana',
-  office: 'Office',
+export const CATEGORIA_LABEL: Record<Categoria, string> = {
   menu: 'Menú',
-  noche: 'Noche',
+  office: 'Office',
 }
 
-export const GRUPO_ORDEN: Grupo[] = ['manana', 'office', 'menu', 'noche']
+export const CATEGORIA_ORDEN: Categoria[] = ['menu', 'office']
 
-/** Clases de Tailwind por grupo — verde / azul / naranja / violeta, como pediste. */
-interface GrupoEstilo {
+interface CategoriaEstilo {
   bg: string
   text: string
   border: string
@@ -136,8 +122,9 @@ interface GrupoEstilo {
   font: string
 }
 
-export const GRUPO_COLOR_CLASSES: Record<Grupo, GrupoEstilo> = {
-  manana: {
+/** Menú = verde, Office = azul. */
+export const CATEGORIA_COLOR_CLASSES: Record<Categoria, CategoriaEstilo> = {
+  menu: {
     bg: 'bg-emerald-50',
     text: 'text-emerald-700',
     border: 'border-emerald-100',
@@ -152,22 +139,6 @@ export const GRUPO_COLOR_CLASSES: Record<Grupo, GrupoEstilo> = {
     header: 'bg-sky-600',
     fill: 'FFE0F2FE',
     font: 'FF0369A1',
-  },
-  menu: {
-    bg: 'bg-orange-50',
-    text: 'text-orange-700',
-    border: 'border-orange-100',
-    header: 'bg-orange-600',
-    fill: 'FFFFEDD5',
-    font: 'FFC2410C',
-  },
-  noche: {
-    bg: 'bg-violet-50',
-    text: 'text-violet-700',
-    border: 'border-violet-100',
-    header: 'bg-violet-600',
-    fill: 'FFEDE9FE',
-    font: 'FF6D28D9',
   },
 }
 
