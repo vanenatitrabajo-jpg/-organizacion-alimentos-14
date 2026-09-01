@@ -60,7 +60,11 @@ function nuevoId() {
 
 /**
  * Convierte las filas crudas detectadas en el Excel en asignaciones
- * Menú/Office. Se conserva el horario de cada bloque (una persona puede
+ * Menú/Office. Si la persona tiene una categoría fija configurada en
+ * "Personal de Alimentos", esa categoría manda (por ejemplo, alguien fijo
+ * de Office sigue siendo Office aunque ese día aparezca en un bloque de
+ * la mañana). Si no tiene categoría fija, se decide por el horario del
+ * bloque. Se conserva el horario de cada bloque (una persona puede
  * aparecer varias veces el mismo día si trabaja distintos bloques), pero
  * nunca dos veces en el mismo bloque horario del mismo día.
  */
@@ -71,12 +75,12 @@ export function generarAsignaciones(filas: FilaCruda[], personas: Persona[]): As
   for (const fila of filas) {
     if (!fila.fecha || !fila.nombre) continue
 
-    const categoria = categoriaPorHorario(fila.horarioTexto)
     const clave = `${fila.fecha}__${normalizar(fila.horarioTexto)}__${normalizar(fila.nombre)}`
     if (vistos.has(clave)) continue
     vistos.add(clave)
 
     const persona = encontrarPersona(fila.nombre, personas)
+    const categoria = persona?.categoria_fija ?? categoriaPorHorario(fila.horarioTexto)
 
     resultado.push({
       id: nuevoId(),
