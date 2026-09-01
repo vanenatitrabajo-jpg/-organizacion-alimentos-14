@@ -1,16 +1,6 @@
 import * as XLSX from 'xlsx'
 import { FilaCruda } from './types'
-import { excelSerialToISO, parseFechaTexto, extraerHorarios } from './dateUtils'
-
-const PALABRAS_ALIMENTOS = ['alimentos', 'alimento']
-
-const HEADER_KEYWORDS: Record<string, string[]> = {
-  fecha: ['fecha'],
-  dia: ['dia', 'día'],
-  horario: ['horario', 'hora'],
-  nombre: ['nombre', 'persona', 'personal', 'apellido'],
-  sector: ['sector', 'actividad', 'servicio', 'area', 'área', 'tarea'],
-}
+import { parseFechaTexto, diaDeSemana } from './dateUtils'
 
 function normalizar(texto: string): string {
   return texto
@@ -21,36 +11,41 @@ function normalizar(texto: string): string {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function contieneAlimentos(texto: string): boolean {
-  const n = normalizar(texto)
-  return PALABRAS_ALIMENTOS.some((p) => n.includes(p))
-}
-
-function detectarColumnas(headerRow: unknown[]): Record<string, number> {
-  const columnas: Record<string, number> = {}
-  headerRow.forEach((celda, idx) => {
-    const n = normalizar(String(celda ?? ''))
-    if (!n) return
-    for (const [campo, palabras] of Object.entries(HEADER_KEYWORDS)) {
-      if (palabras.some((p) => n.includes(p)) && columnas[campo] === undefined) {
-        columnas[campo] = idx
-      }
-    }
-  })
-  return columnas
-}
-
-function esFilaDeEncabezado(row: unknown[]): boolean {
-  const cols = detectarColumnas(row)
-  return Object.keys(cols).length >= 2
+function esAlimentos(texto: string): boolean {
+  return normalizar(texto).includes('aliment')
 }
 
 function celdaComoTexto(valor: unknown): string {
   if (valor === null || valor === undefined) return ''
   if (valor instanceof Date) {
+    const h = valor.getHours()
+    const m = valor.getMinutes()
+    if (h || m) return `${h}:${String(m).padStart(2, '0')}`
     return `${valor.getDate()}/${valor.getMonth() + 1}/${valor.getFullYear()}`
   }
-  return String(valor)
+  return String(valor).trim()
+}
+
+/**
+ * Limpia un nombre que puede traer un horario pegado, ej:
+ * "11:30 Isa" -> "Isa", "16:15Anto" -> "Anto", "Isah/11:30" -> "Isa",
+ * "Vaneh/17:30" -> "Vane".
+ */
+function limpiarNombre(crudo: string): string {
+  let n = crudo.trim()
+  n = n.replace(/^\d{1,2}[:.]\d{2}\s*/, '') // horario al principio
+  n = n.replace(/h?\s*\/?\s*\d{1,2}[:.]\d{2}\s*$/i, '') // "h/11:30" al final
+  n = n.replace(/\bhs?\b\.?/gi, '')
+  n = n.replace(/[¿?()]/g, '')
+  n = n.replace(/\s{2,}/g, ' ')
+  return n.trim()
+}
+
+function esNombreValido(n: string): boolean {
+  if (!n) return false
+  if (n.length > 40) return false
+  if (/^\d+$/.test(n)) return false
+  return true
 }
 
 let contador = 0
@@ -62,15 +57,23 @@ function nuevoId() {
 export interface ResultadoParseo {
   filas: FilaCruda[]
   hojasAnalizadas: number
-  totalFilasRevisadas: number
+  hojasConAlimentos: number
 }
 
+/**
+ * Cada hoja del Excel es un día. Dentro de la hoja, la columna A trae el
+ * horario del bloque (solo en la primera fila del bloque, después queda en
+ * blanco), la columna B trae el nombre del sector/tarea (ej "Alimentos",
+ * "HK", "Ropa"...) y también puede quedar en blanco en filas de
+ * continuación del mismo bloque. Las columnas C a G traen los nombres de
+ * las personas asignadas ese bloque — pueden ser varias filas.
+ */
 export async function parsearExcel(file: File, anioReferencia: number): Promise<ResultadoParseo> {
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
 
   const filas: FilaCruda[] = []
-  let totalFilasRevisadas = 0
+  let hojasConAlimentos = 0
 
   for (const nombreHoja of workbook.SheetNames) {
     const hoja = workbook.Sheets[nombreHoja]
@@ -82,100 +85,45 @@ export async function parsearExcel(file: File, anioReferencia: number): Promise<
     })
     if (data.length === 0) continue
 
-    // Fecha/día de referencia si el nombre de la hoja ya lo indica
-    // (ej: hoja "Lunes 24" o "24-08").
-    const fechaDeHoja = parseFechaTexto(nombreHoja, anioReferencia)
+    const fechaISO = parseFechaTexto(nombreHoja, anioReferencia)
+    if (!fechaISO) continue // hojas que no son un día puntual (resúmenes, hojas sueltas, etc.)
 
-    // Buscar fila de encabezado dentro de las primeras 6 filas.
-    let headerIdx = -1
-    let columnas: Record<string, number> = {}
-    for (let i = 0; i < Math.min(6, data.length); i++) {
-      if (esFilaDeEncabezado(data[i])) {
-        headerIdx = i
-        columnas = detectarColumnas(data[i])
-        break
-      }
-    }
+    const dia = diaDeSemana(fechaISO)
 
-    if (headerIdx >= 0) {
-      // ---- Modo estructurado: usamos las columnas detectadas ----
-      for (let i = headerIdx + 1; i < data.length; i++) {
-        const row = data[i]
-        totalFilasRevisadas++
-        const textoCompleto = row.map(celdaComoTexto).join(' | ')
+    let horarioActual = ''
+    let sectorActual = ''
+    let huboAlimentos = false
 
-        const sectorTexto = columnas.sector !== undefined ? celdaComoTexto(row[columnas.sector]) : ''
-        const esAlimentos = contieneAlimentos(sectorTexto) || contieneAlimentos(textoCompleto)
-        if (!esAlimentos) continue
+    for (const row of data) {
+      const colA = celdaComoTexto(row[0])
+      const colB = celdaComoTexto(row[1])
 
-        const nombreTexto = columnas.nombre !== undefined ? celdaComoTexto(row[columnas.nombre]).trim() : ''
-        const fechaTexto = columnas.fecha !== undefined ? celdaComoTexto(row[columnas.fecha]) : ''
-        const diaTexto = columnas.dia !== undefined ? celdaComoTexto(row[columnas.dia]) : ''
-        const horarioTexto = columnas.horario !== undefined ? celdaComoTexto(row[columnas.horario]) : textoCompleto
+      if (colA) horarioActual = colA
+      if (colB) sectorActual = colB
 
-        let fechaISO: string | null = null
-        const serial = Number(fechaTexto)
-        if (fechaTexto && !Number.isNaN(serial) && serial > 20000 && serial < 90000) {
-          fechaISO = excelSerialToISO(serial)
-        } else if (fechaTexto) {
-          fechaISO = parseFechaTexto(fechaTexto, anioReferencia)
-        }
-        if (!fechaISO) fechaISO = fechaDeHoja ?? parseFechaTexto(diaTexto, anioReferencia)
+      if (!esAlimentos(sectorActual)) continue
+      huboAlimentos = true
 
-        const horarios = extraerHorarios(horarioTexto)
+      for (let i = 2; i <= 6; i++) {
+        const crudo = celdaComoTexto(row[i])
+        if (!crudo) continue
+        const nombre = limpiarNombre(crudo)
+        if (!esNombreValido(nombre)) continue
 
         filas.push({
           id: nuevoId(),
           hoja: nombreHoja,
-          fila: i + 1,
-          fechaTexto: fechaTexto || diaTexto || nombreHoja,
           fecha: fechaISO,
-          dia: diaTexto || null,
-          horario: horarios[0] ?? null,
-          nombre: nombreTexto || null,
-          observacion: !nombreTexto || !fechaISO || horarios.length === 0 ? 'Faltan datos en la fila original' : null,
-        })
-      }
-    } else {
-      // ---- Modo heurístico: la hoja no tiene encabezados claros ----
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i]
-        totalFilasRevisadas++
-        const textoCompleto = row.map(celdaComoTexto).join(' | ')
-        if (!contieneAlimentos(textoCompleto)) continue
-
-        const horarios = extraerHorarios(textoCompleto)
-        // Nombre: la celda de texto más larga que no sea un horario/fecha/"alimentos".
-        let nombreTexto: string | null = null
-        let mejorLongitud = 0
-        for (const celda of row) {
-          const txt = celdaComoTexto(celda).trim()
-          if (!txt) continue
-          if (contieneAlimentos(txt)) continue
-          if (/^\d{1,2}[:.]\d{2}/.test(txt)) continue
-          if (parseFechaTexto(txt, anioReferencia)) continue
-          if (txt.length > mejorLongitud && txt.length < 40) {
-            mejorLongitud = txt.length
-            nombreTexto = txt
-          }
-        }
-
-        const fechaISO = fechaDeHoja ?? parseFechaTexto(nombreHoja, anioReferencia)
-
-        filas.push({
-          id: nuevoId(),
-          hoja: nombreHoja,
-          fila: i + 1,
-          fechaTexto: fechaISO ? null : nombreHoja,
-          fecha: fechaISO,
-          dia: null,
-          horario: horarios[0] ?? null,
-          nombre: nombreTexto,
-          observacion: 'Detectado sin encabezados claros — revisar antes de confirmar',
+          dia,
+          horarioTexto: horarioActual || '(sin horario)',
+          nombreCrudo: crudo,
+          nombre,
         })
       }
     }
+
+    if (huboAlimentos) hojasConAlimentos++
   }
 
-  return { filas, hojasAnalizadas: workbook.SheetNames.length, totalFilasRevisadas }
+  return { filas, hojasAnalizadas: workbook.SheetNames.length, hojasConAlimentos }
 }
