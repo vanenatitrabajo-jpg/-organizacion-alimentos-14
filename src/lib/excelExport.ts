@@ -1,7 +1,8 @@
 import ExcelJS from 'exceljs'
 import { saveAs } from 'file-saver'
-import { AsignacionGenerada, CATEGORIA_COLOR_CLASSES, CATEGORIA_LABEL, CATEGORIA_ORDEN } from './types'
+import { AsignacionGenerada, CATEGORIA_COLOR_CLASSES, CATEGORIA_LABEL } from './types'
 import { formatFechaLarga } from './dateUtils'
+import { horarioAMinutos } from './motor'
 
 const HEADER_FILL = 'FF231F1A'
 
@@ -30,7 +31,7 @@ export async function exportarExcel(
 
   ws.views = [{ showGridLines: false }]
 
-  ws.mergeCells('A1:C1')
+  ws.mergeCells('A1:D1')
   const tituloCell = ws.getCell('A1')
   tituloCell.value = titulo.toUpperCase()
   tituloCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } }
@@ -38,7 +39,7 @@ export async function exportarExcel(
   tituloCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } }
   ws.getRow(1).height = 30
 
-  ws.mergeCells('A2:C2')
+  ws.mergeCells('A2:D2')
   const subtitulo = ws.getCell('A2')
   subtitulo.value = `Del ${formatFechaLarga(fechaInicio)} al ${formatFechaLarga(fechaFin)}`
   subtitulo.font = { name: 'Calibri', size: 11, italic: true, color: { argb: 'FF7A7367' } }
@@ -46,9 +47,9 @@ export async function exportarExcel(
 
   ws.addRow([])
 
-  ws.columns = [{ width: 18 }, { width: 40 }, { width: 40 }]
+  ws.columns = [{ width: 16 }, { width: 16 }, { width: 12 }, { width: 55 }]
 
-  const headerRow = ws.addRow(['DÍA', ...CATEGORIA_ORDEN.map((c) => CATEGORIA_LABEL[c].toUpperCase())])
+  const headerRow = ws.addRow(['DÍA', 'HORARIO', 'SERVICIO', 'PERSONAL'])
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } }
@@ -59,41 +60,9 @@ export async function exportarExcel(
 
   for (const fecha of dias) {
     const delDia = asignaciones.filter((a) => a.fecha === fecha)
-
-    const textoPorCategoria = CATEGORIA_ORDEN.map((categoria) =>
-      delDia
-        .filter((a) => a.categoria === categoria)
-        .map((a) => `${a.nombre} (${a.horarioTexto})`)
-        .join('\n')
+    const horarios = Array.from(new Set(delDia.map((a) => a.horarioTexto))).sort(
+      (a, b) => (horarioAMinutos(a) ?? 0) - (horarioAMinutos(b) ?? 0)
     )
 
-    const row = ws.addRow([formatFechaLarga(fecha).toUpperCase(), ...textoPorCategoria])
-    const maxLineas = Math.max(1, ...textoPorCategoria.map((t) => t.split('\n').filter(Boolean).length))
-    row.height = 15 * maxLineas + 10
-
-    row.eachCell((cell, colNumber) => {
-      cell.border = thinBorder()
-      cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 ? 'center' : 'left', wrapText: true }
-      if (colNumber === 1) {
-        cell.font = { bold: true, size: 11 }
-      } else {
-        const categoria = CATEGORIA_ORDEN[colNumber - 2]
-        const estilo = CATEGORIA_COLOR_CLASSES[categoria]
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: estilo.fill } }
-        cell.font = { color: { argb: estilo.font }, bold: true, size: 10 }
-      }
-    })
-  }
-
-  ws.pageSetup.printArea = `A1:C${ws.rowCount}`
-  ws.pageSetup.horizontalCentered = true
-
-  const buffer = await wb.xlsx.writeBuffer()
-  const nombreArchivo = `organizacion-alimentos_${fechaInicio}_${fechaFin}.xlsx`
-  saveAs(new Blob([buffer], { type: 'application/octet-stream' }), nombreArchivo)
-}
-
-function thinBorder() {
-  const style = { style: 'thin' as const, color: { argb: 'FFE7E5DE' } }
-  return { top: style, left: style, bottom: style, right: style }
-}
+    let primeraFilaDelDia = true
+    for (const
