@@ -3,19 +3,18 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { CalendarRange, Loader2, Printer, FileSpreadsheet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../lib/store'
-import { OrganizacionGenerada, Puesto } from '../lib/types'
+import { OrganizacionGenerada } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
 import { exportarExcel } from '../lib/excelExport'
 import CarteleraView from '../components/CarteleraView'
 
-/** Parte el rango de fechas en semanas (lunes a domingo) para mostrarlas por separado. */
 function agruparPorSemana(fechas: string[]): string[][] {
   const ordenadas = [...fechas].sort()
   const semanas: string[][] = []
   let semanaActual: string[] = []
 
   for (const fecha of ordenadas) {
-    const dow = new Date(fecha + 'T00:00:00').getDay() // 0 = domingo
+    const dow = new Date(fecha + 'T00:00:00').getDay()
     if (dow === 1 && semanaActual.length > 0) {
       semanas.push(semanaActual)
       semanaActual = []
@@ -34,15 +33,6 @@ export default function Mensual() {
 
   const [org, setOrg] = useState<OrganizacionGenerada | null>(actual?.tipo === 'mensual' ? actual : null)
   const [cargando, setCargando] = useState(!!id)
-  const [puestos, setPuestos] = useState<Puesto[]>([])
-
-  useEffect(() => {
-    supabase
-      .from('puestos')
-      .select('*')
-      .eq('activo', true)
-      .then(({ data }) => data && setPuestos(data as Puesto[]))
-  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -110,7 +100,7 @@ export default function Mensual() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => exportarExcel(org.asignaciones, puestos, 'Organización mensual de Alimentos', org.fechaInicio, org.fechaFin)}
+            onClick={() => exportarExcel(org.asignaciones, 'Organización mensual de Alimentos', org.fechaInicio, org.fechaFin)}
             className="inline-flex items-center gap-2 rounded-lg border border-base-300 px-3.5 py-2 text-sm font-medium text-ink-700 hover:bg-base-100 transition-colors"
           >
             <FileSpreadsheet size={15} />
@@ -137,7 +127,6 @@ export default function Mensual() {
               fechaInicio={fechas[0]}
               fechaFin={fechas[fechas.length - 1]}
               asignaciones={org.asignaciones.filter((a) => fechas.includes(a.fecha))}
-              puestos={puestos}
               notasPorDia={org.notasPorDia}
             />
           </div>
