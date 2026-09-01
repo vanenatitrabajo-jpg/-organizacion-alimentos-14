@@ -1,20 +1,16 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Users, Plus, Trash2, Pencil, X, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { Persona, Puesto, GRUPO_LABEL, GRUPO_ORDEN, Grupo } from '../lib/types'
+import { Persona, Categoria, CATEGORIA_LABEL, CATEGORIA_COLOR_CLASSES } from '../lib/types'
 
 const vacio = {
   nombre: '',
-  puesto_principal_id: '',
-  puesto_segunda_id: '',
-  puesto_tercera_id: '',
-  es_fijo: true,
+  categoria_fija: '' as Categoria | '',
   observaciones: '',
 }
 
 export default function PersonalAlimentos() {
   const [personas, setPersonas] = useState<Persona[]>([])
-  const [puestos, setPuestos] = useState<Puesto[]>([])
   const [loading, setLoading] = useState(true)
   const [editando, setEditando] = useState<string | null>(null)
   const [form, setForm] = useState(vacio)
@@ -24,24 +20,14 @@ export default function PersonalAlimentos() {
 
   async function cargar() {
     setLoading(true)
-    const [p, q] = await Promise.all([
-      supabase.from('personas').select('*').order('nombre'),
-      supabase.from('puestos').select('*').eq('activo', true).order('grupo').order('sort_order'),
-    ])
-    if (p.data) setPersonas(p.data as Persona[])
-    if (q.data) setPuestos(q.data as Puesto[])
+    const { data } = await supabase.from('personas').select('*').order('nombre')
+    if (data) setPersonas(data as Persona[])
     setLoading(false)
   }
 
   useEffect(() => {
     cargar()
   }, [])
-
-  function nombrePuesto(id: string | null) {
-    if (!id) return '—'
-    const puesto = puestos.find((x) => x.id === id)
-    return puesto ? `${puesto.nombre} (${GRUPO_LABEL[puesto.grupo]})` : '—'
-  }
 
   function nuevoRegistro() {
     setForm(vacio)
@@ -52,10 +38,7 @@ export default function PersonalAlimentos() {
   function editar(p: Persona) {
     setForm({
       nombre: p.nombre,
-      puesto_principal_id: p.puesto_principal_id ?? '',
-      puesto_segunda_id: p.puesto_segunda_id ?? '',
-      puesto_tercera_id: p.puesto_tercera_id ?? '',
-      es_fijo: p.es_fijo ?? true,
+      categoria_fija: p.categoria_fija ?? '',
       observaciones: p.observaciones ?? '',
     })
     setEditando(p.id)
@@ -70,10 +53,7 @@ export default function PersonalAlimentos() {
 
     const payload = {
       nombre: form.nombre.trim(),
-      puesto_principal_id: form.puesto_principal_id || null,
-      puesto_segunda_id: form.puesto_segunda_id || null,
-      puesto_tercera_id: form.puesto_tercera_id || null,
-      es_fijo: form.es_fijo,
+      categoria_fija: form.categoria_fija || null,
       observaciones: form.observaciones.trim() || null,
     }
 
@@ -96,17 +76,14 @@ export default function PersonalAlimentos() {
     cargar()
   }
 
-  const puestosPorGrupo = GRUPO_ORDEN.map((g) => ({ grupo: g, lista: puestos.filter((p) => p.grupo === g) }))
-
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-3xl">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink-900">Personal de Alimentos</h1>
           <p className="text-ink-500 mt-1">
-            Cada persona con su puesto principal y las preferencias de respaldo. Al generar la
-            organización, si el puesto principal está ocupado se prueba la segunda preferencia y
-            después la tercera.
+            El personal fijo de cada categoría. Cuando aparezca alguien en el Excel que no está
+            acá, se marca para que lo revises y lo agregues.
           </p>
         </div>
         <button
@@ -137,47 +114,42 @@ export default function PersonalAlimentos() {
             />
           </label>
 
-          <div className="grid sm:grid-cols-3 gap-4">
-            <SelectPuesto
-              label="Puesto principal"
-              value={form.puesto_principal_id}
-              onChange={(v) => setForm({ ...form, puesto_principal_id: v })}
-              puestosPorGrupo={puestosPorGrupo}
-            />
-            <SelectPuesto
-              label="Segunda preferencia"
-              value={form.puesto_segunda_id}
-              onChange={(v) => setForm({ ...form, puesto_segunda_id: v })}
-              puestosPorGrupo={puestosPorGrupo}
-            />
-            <SelectPuesto
-              label="Tercera preferencia"
-              value={form.puesto_tercera_id}
-              onChange={(v) => setForm({ ...form, puesto_tercera_id: v })}
-              puestosPorGrupo={puestosPorGrupo}
-            />
-          </div>
-
           <div>
-            <span className="text-sm font-medium text-ink-700 block mb-1.5">¿Es personal fijo?</span>
+            <span className="text-sm font-medium text-ink-700 block mb-1.5">Categoría habitual</span>
             <div className="flex gap-2">
-              {[
-                { v: true, l: 'Sí' },
-                { v: false, l: 'No' },
-              ].map((op) => (
-                <button
-                  type="button"
-                  key={String(op.v)}
-                  onClick={() => setForm({ ...form, es_fijo: op.v })}
-                  className={`px-4 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                    form.es_fijo === op.v
-                      ? 'bg-cocina-400 text-white border-cocina-400'
-                      : 'bg-base-50 text-ink-700 border-base-300'
-                  }`}
-                >
-                  {op.l}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, categoria_fija: 'menu' })}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  form.categoria_fija === 'menu'
+                    ? 'bg-emerald-500 text-white border-emerald-500'
+                    : 'bg-base-50 text-ink-700 border-base-300'
+                }`}
+              >
+                Menú
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, categoria_fija: 'office' })}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  form.categoria_fija === 'office'
+                    ? 'bg-sky-500 text-white border-sky-500'
+                    : 'bg-base-50 text-ink-700 border-base-300'
+                }`}
+              >
+                Office
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, categoria_fija: '' })}
+                className={`px-4 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  form.categoria_fija === ''
+                    ? 'bg-ink-900 text-white border-ink-900'
+                    : 'bg-base-50 text-ink-700 border-base-300'
+                }`}
+              >
+                Sin definir
+              </button>
             </div>
           </div>
 
@@ -227,17 +199,16 @@ export default function PersonalAlimentos() {
             <div key={p.id} className="flex items-center gap-4 px-5 py-3.5">
               <span
                 className={`shrink-0 text-xs font-medium px-2.5 py-1 rounded-full ${
-                  p.es_fijo ? 'bg-cocina-50 text-cocina-600' : 'bg-base-100 text-ink-500'
+                  p.categoria_fija
+                    ? `${CATEGORIA_COLOR_CLASSES[p.categoria_fija].bg} ${CATEGORIA_COLOR_CLASSES[p.categoria_fija].text}`
+                    : 'bg-base-100 text-ink-500'
                 }`}
               >
-                {p.es_fijo ? 'Fijo' : 'No fijo'}
+                {p.categoria_fija ? CATEGORIA_LABEL[p.categoria_fija] : 'Sin definir'}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-ink-900 text-sm truncate">{p.nombre}</p>
-                <p className="text-ink-500 text-xs truncate">
-                  1º {nombrePuesto(p.puesto_principal_id)} · 2º {nombrePuesto(p.puesto_segunda_id)} · 3º{' '}
-                  {nombrePuesto(p.puesto_tercera_id)}
-                </p>
+                {p.observaciones && <p className="text-ink-500 text-xs truncate">{p.observaciones}</p>}
               </div>
               <button onClick={() => editar(p)} className="text-ink-500 hover:text-ink-900 shrink-0">
                 <Pencil size={16} />
@@ -250,39 +221,5 @@ export default function PersonalAlimentos() {
         </div>
       )}
     </div>
-  )
-}
-
-function SelectPuesto({
-  label,
-  value,
-  onChange,
-  puestosPorGrupo,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  puestosPorGrupo: { grupo: Grupo; lista: Puesto[] }[]
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-ink-700">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="px-3 py-2.5 rounded-lg border border-base-300 bg-base-50 focus:outline-none focus:ring-2 focus:ring-cocina-400"
-      >
-        <option value="">— Sin definir —</option>
-        {puestosPorGrupo.map(({ grupo, lista }) => (
-          <optgroup key={grupo} label={GRUPO_LABEL[grupo]}>
-            {lista.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-    </label>
   )
 }
