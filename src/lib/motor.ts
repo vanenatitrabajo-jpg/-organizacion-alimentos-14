@@ -1,5 +1,4 @@
-import { AsignacionGenerada, FilaCruda, Persona, Puesto } from './types'
-import { diaDeSemana } from './dateUtils'
+import { AsignacionGenerada, Categoria, FilaCruda, Persona } from './types'
 
 function normalizar(texto: string): string {
   return texto
@@ -9,7 +8,6 @@ function normalizar(texto: string): string {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-/** Empareja el nombre detectado en el Excel con la base de Personal de Alimentos. */
 function encontrarPersona(nombre: string, personas: Persona[]): Persona | null {
   const n = normalizar(nombre)
   if (!n) return null
@@ -19,6 +17,32 @@ function encontrarPersona(nombre: string, personas: Persona[]): Persona | null {
   return match ?? null
 }
 
+/** Extrae la hora de inicio de un texto como "12:45 a 14:30" o "16 a 18:15", en minutos desde medianoche. */
+function horarioAMinutos(horarioTexto: string): number | null {
+  const match = horarioTexto.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?/)
+  if (!match) return null
+  const h = Number(match[1])
+  const m = match[2] ? Number(match[2]) : 0
+  if (Number.isNaN(h) || Number.isNaN(m)) return null
+  return h * 60 + m
+}
+
+/**
+ * Regla confirmada:
+ *  - Mañana (hasta ~12:15)      -> Menú
+ *  - Turno mediodía (~12:45-14:30) -> Office
+ *  - Turno tarde (~16:00-19:45)    -> Menú
+ *  - Turno noche (~20:15-21:35)    -> Office
+ */
+export function categoriaPorHorario(horarioTexto: string): Categoria {
+  const t = horarioAMinutos(horarioTexto)
+  if (t === null) return 'office'
+  if (t < 12 * 60 + 20) return 'menu' // antes de 12:20
+  if (t < 15 * 60 + 30) return 'office' // 12:20 a 15:30 -> mediodía
+  if (t < 20 * 60) return 'menu' // 15:30 a 20:00 -> tarde
+  return 'office' // desde las 20:00 -> noche
+}
+
 let contador = 0
 function nuevoId() {
   contador += 1
@@ -26,155 +50,36 @@ function nuevoId() {
 }
 
 /**
- * Genera las asignaciones finales.
- *
- * Para cada persona detectada en el Excel, un día dado:
- *  1) Se busca en Personal de Alimentos.
- *  2) Se intenta ubicarla en su puesto principal.
- *  3) Si el puesto ya está ocupado ese día, se prueba la segunda preferencia.
- *  4) Si también está ocupada, se prueba la tercera.
- *  5) Si las tres están ocupadas (o no tiene preferencias cargadas), queda
- *     marcada como conflicto — se resuelve a mano con drag & drop.
- *
- * Si la misma persona aparece varias veces el mismo día en el Excel (por
- * ejemplo con distintos horarios), se procesa una sola vez por día.
+ * Convierte las filas crudas detectadas en el Excel en asignaciones
+ * Menú/Office. Una persona puede aparecer en las dos categorías el mismo
+ * día si trabaja bloques de ambas (ej: mañana Menú y luego mediodía
+ * Office), pero nunca dos veces en la misma categoría el mismo día.
  */
-export function generarAsignaciones(
-  filas: FilaCruda[],
-  personas: Persona[],
-  puestos: Puesto[]
-): AsignacionGenerada[] {
+export function generarAsignaciones(filas: FilaCruda[], personas: Persona[]): AsignacionGenerada[] {
+  const vistos = new Set<string>() // `${fecha}__${categoria}__${nombre normalizado}`
   const resultado: AsignacionGenerada[] = []
-  // Puestos ya ocupados, por fecha: `${fecha}__${puestoId}`
-  const ocupado = new Set<string>()
 
-  const porFecha = new Map<string, FilaCruda[]>()
-  for (const f of filas) {
-    if (!f.fecha) continue
-    if (!porFecha.has(f.fecha)) porFecha.set(f.fecha, [])
-    porFecha.get(f.fecha)!.push(f)
-  }
+  for (const fila of filas) {
+    if (!fila.fecha || !fila.nombre) continue
 
-  for (const [fecha, filasDelDia] of porFecha) {
-    const vistosHoy = new Set<string>()
+    const categoria = categoriaPorHorario(fila.horarioTexto)
+    const clave = `${fila.fecha}__${categoria}__${normalizar(fila.nombre)}`
+    if (vistos.has(clave)) continue
+    vistos.add(clave)
 
-    for (const fila of filasDelDia) {
-      const nombreDetectado = fila.nombre?.trim()
-      const dia = fila.dia ?? diaDeSemana(fecha)
+    const persona = encontrarPersona(fila.nombre, personas)
 
-      if (!nombreDetectado) {
-        resultado.push({
-          id: nuevoId(),
-          fecha,
-          dia,
-          nombre: '(nombre sin detectar)',
-          personaId: null,
-          puestoId: null,
-          puestoNombre: null,
-          grupo: null,
-          preferenciaUsada: null,
-          conflicto: true,
-          sinPreferenciasCargadas: false,
-          observaciones: 'No se pudo detectar el nombre en esta fila del Excel.',
-        })
-        continue
-      }
-
-      const clave = normalizar(nombreDetectado)
-      if (vistosHoy.has(clave)) continue // ya se procesó a esta persona este día
-      vistosHoy.add(clave)
-
-      const persona = encontrarPersona(nombreDetectado, personas)
-
-      if (!persona) {
-        resultado.push({
-          id: nuevoId(),
-          fecha,
-          dia,
-          nombre: nombreDetectado,
-          personaId: null,
-          puestoId: null,
-          puestoNombre: null,
-          grupo: null,
-          preferenciaUsada: null,
-          conflicto: true,
-          sinPreferenciasCargadas: true,
-          observaciones: 'No está cargada en "Personal de Alimentos" — agregala para que se ubique sola.',
-        })
-        continue
-      }
-
-      const preferencias: { id: string; n: 1 | 2 | 3 }[] = [
-        { id: persona.puesto_principal_id ?? '', n: 1 as const },
-        { id: persona.puesto_segunda_id ?? '', n: 2 as const },
-        { id: persona.puesto_tercera_id ?? '', n: 3 as const },
-      ].filter((p) => p.id) as { id: string; n: 1 | 2 | 3 }[]
-
-      if (preferencias.length === 0) {
-        resultado.push({
-          id: nuevoId(),
-          fecha,
-          dia,
-          nombre: persona.nombre,
-          personaId: persona.id,
-          puestoId: null,
-          puestoNombre: null,
-          grupo: null,
-          preferenciaUsada: null,
-          conflicto: true,
-          sinPreferenciasCargadas: true,
-          observaciones: 'No tiene preferencias de puesto cargadas en su ficha.',
-        })
-        continue
-      }
-
-      let asignado: { puesto: Puesto; n: 1 | 2 | 3 } | null = null
-      for (const pref of preferencias) {
-        const puesto = puestos.find((p) => p.id === pref.id)
-        if (!puesto) continue
-        const claveOcupacion = `${fecha}__${puesto.id}`
-        if (!ocupado.has(claveOcupacion)) {
-          asignado = { puesto, n: pref.n }
-          ocupado.add(claveOcupacion)
-          break
-        }
-      }
-
-      if (asignado) {
-        resultado.push({
-          id: nuevoId(),
-          fecha,
-          dia,
-          nombre: persona.nombre,
-          personaId: persona.id,
-          puestoId: asignado.puesto.id,
-          puestoNombre: asignado.puesto.nombre,
-          grupo: asignado.puesto.grupo,
-          preferenciaUsada: asignado.n,
-          conflicto: false,
-          sinPreferenciasCargadas: false,
-          observaciones:
-            asignado.n > 1
-              ? `Su puesto principal estaba ocupado — se ubicó con la preferencia ${asignado.n}.`
-              : null,
-        })
-      } else {
-        resultado.push({
-          id: nuevoId(),
-          fecha,
-          dia,
-          nombre: persona.nombre,
-          personaId: persona.id,
-          puestoId: null,
-          puestoNombre: null,
-          grupo: null,
-          preferenciaUsada: null,
-          conflicto: true,
-          sinPreferenciasCargadas: false,
-          observaciones: 'Sus 3 preferencias ya estaban ocupadas ese día — asignar a mano arrastrando.',
-        })
-      }
-    }
+    resultado.push({
+      id: nuevoId(),
+      fecha: fila.fecha,
+      dia: fila.dia ?? '',
+      nombre: persona?.nombre ?? fila.nombre,
+      personaId: persona?.id ?? null,
+      categoria,
+      horarioTexto: fila.horarioTexto,
+      esPersonaNueva: !persona,
+      observaciones: !persona ? 'No está en "Personal de Alimentos" — revisar y agregar.' : null,
+    })
   }
 
   return resultado
