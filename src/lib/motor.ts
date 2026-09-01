@@ -18,7 +18,7 @@ function encontrarPersona(nombre: string, personas: Persona[]): Persona | null {
 }
 
 /** Extrae la hora de inicio de un texto como "12:45 a 14:30" o "16 a 18:15", en minutos desde medianoche. */
-function horarioAMinutos(horarioTexto: string): number | null {
+export function horarioAMinutos(horarioTexto: string): number | null {
   const match = horarioTexto.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?/)
   if (!match) return null
   const h = Number(match[1])
@@ -51,19 +51,19 @@ function nuevoId() {
 
 /**
  * Convierte las filas crudas detectadas en el Excel en asignaciones
- * Menú/Office. Una persona puede aparecer en las dos categorías el mismo
- * día si trabaja bloques de ambas (ej: mañana Menú y luego mediodía
- * Office), pero nunca dos veces en la misma categoría el mismo día.
+ * Menú/Office. Se conserva el horario de cada bloque (una persona puede
+ * aparecer varias veces el mismo día si trabaja distintos bloques), pero
+ * nunca dos veces en el mismo bloque horario del mismo día.
  */
 export function generarAsignaciones(filas: FilaCruda[], personas: Persona[]): AsignacionGenerada[] {
-  const vistos = new Set<string>() // `${fecha}__${categoria}__${nombre normalizado}`
+  const vistos = new Set<string>() // `${fecha}__${horario normalizado}__${nombre normalizado}`
   const resultado: AsignacionGenerada[] = []
 
   for (const fila of filas) {
     if (!fila.fecha || !fila.nombre) continue
 
     const categoria = categoriaPorHorario(fila.horarioTexto)
-    const clave = `${fila.fecha}__${categoria}__${normalizar(fila.nombre)}`
+    const clave = `${fila.fecha}__${normalizar(fila.horarioTexto)}__${normalizar(fila.nombre)}`
     if (vistos.has(clave)) continue
     vistos.add(clave)
 
