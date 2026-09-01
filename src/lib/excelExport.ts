@@ -7,21 +7,39 @@ import { compararHorarios } from './motor'
 const NEGRO = 'FF000000'
 const GRIS_CLARO = 'FFF2F2F2'
 
-export async function exportarExcel(
-  asignaciones: AsignacionGenerada[],
+export type Orientacion = 'portrait' | 'landscape'
+
+function agruparPorSemana(fechas: string[]): string[][] {
+  const ordenadas = [...fechas].sort()
+  const semanas: string[][] = []
+  let semanaActual: string[] = []
+  for (const fecha of ordenadas) {
+    const dow = new Date(fecha + 'T00:00:00').getDay()
+    if (dow === 1 && semanaActual.length > 0) {
+      semanas.push(semanaActual)
+      semanaActual = []
+    }
+    semanaActual.push(fecha)
+  }
+  if (semanaActual.length > 0) semanas.push(semanaActual)
+  return semanas
+}
+
+/** Arma una hoja con la tabla DÍA/HORARIO/SERVICIO/PERSONAL, lista para 1 hoja A4. */
+function agregarHojaSemana(
+  wb: ExcelJS.Workbook,
+  nombreHoja: string,
   titulo: string,
   fechaInicio: string,
-  fechaFin: string
+  fechaFin: string,
+  asignaciones: AsignacionGenerada[],
+  orientacion: Orientacion
 ) {
-  const wb = new ExcelJS.Workbook()
-  wb.creator = 'Organización de Alimentos'
-  wb.created = new Date()
-
   const dias = Array.from(new Set(asignaciones.map((a) => a.fecha))).sort()
 
-  const ws = wb.addWorksheet('Organización de Alimentos', {
+  const ws = wb.addWorksheet(nombreHoja, {
     pageSetup: {
-      orientation: 'portrait',
+      orientation: orientacion,
       paperSize: 9, // A4
       fitToPage: true,
       fitToWidth: 1,
@@ -47,7 +65,10 @@ export async function exportarExcel(
 
   ws.addRow([])
 
-  ws.columns = [{ width: 12 }, { width: 13 }, { width: 11 }, { width: 42 }]
+  ws.columns =
+    orientacion === 'portrait'
+      ? [{ width: 12 }, { width: 13 }, { width: 11 }, { width: 42 }]
+      : [{ width: 14 }, { width: 16 }, { width: 13 }, { width: 70 }]
 
   const headerRow = ws.addRow(['DÍA', 'HORARIO', 'SERVICIO', 'PERSONAL'])
   headerRow.eachCell((cell) => {
@@ -110,9 +131,57 @@ export async function exportarExcel(
 
   ws.pageSetup.printArea = `A1:D${ws.rowCount}`
   ws.pageSetup.horizontalCentered = true
+}
+
+/** Exporta una sola semana en una sola hoja de Excel, lista para imprimir en 1 A4. */
+export async function exportarExcelSemanal(
+  asignaciones: AsignacionGenerada[],
+  titulo: string,
+  fechaInicio: string,
+  fechaFin: string,
+  orientacion: Orientacion = 'portrait'
+) {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Organización de Alimentos'
+  wb.created = new Date()
+
+  agregarHojaSemana(wb, 'Organización de Alimentos', titulo, fechaInicio, fechaFin, asignaciones, orientacion)
 
   const buffer = await wb.xlsx.writeBuffer()
   const nombreArchivo = `organizacion-alimentos_${fechaInicio}_${fechaFin}.xlsx`
+  saveAs(new Blob([buffer], { type: 'application/octet-stream' }), nombreArchivo)
+}
+
+/** Exporta el mes con UNA HOJA POR SEMANA — cada una lista para imprimir en su propio A4. */
+export async function exportarExcelMensual(
+  asignaciones: AsignacionGenerada[],
+  titulo: string,
+  fechaInicio: string,
+  fechaFin: string,
+  orientacion: Orientacion = 'portrait'
+) {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Organización de Alimentos'
+  wb.created = new Date()
+
+  const fechas = Array.from(new Set(asignaciones.map((a) => a.fecha)))
+  const semanas = agruparPorSemana(fechas)
+
+  semanas.forEach((fechasSemana, i) => {
+    const asignacionesSemana = asignaciones.filter((a) => fechasSemana.includes(a.fecha))
+    agregarHojaSemana(
+      wb,
+      `Semana ${i + 1}`,
+      `${titulo} — Semana ${i + 1}`,
+      fechasSemana[0],
+      fechasSemana[fechasSemana.length - 1],
+      asignacionesSemana,
+      orientacion
+    )
+  })
+
+  const buffer = await wb.xlsx.writeBuffer()
+  const nombreArchivo = `organizacion-alimentos-mensual_${fechaInicio}_${fechaFin}.xlsx`
   saveAs(new Blob([buffer], { type: 'application/octet-stream' }), nombreArchivo)
 }
 
