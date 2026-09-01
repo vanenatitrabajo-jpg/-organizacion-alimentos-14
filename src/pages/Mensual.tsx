@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../lib/store'
 import { OrganizacionGenerada } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
-import { exportarExcelMensual, Orientacion } from '../lib/excelExport'
+import { exportarExcelMensual, exportarExcelSemanal, Orientacion } from '../lib/excelExport'
 import CarteleraView from '../components/CarteleraView'
 
 function agruparPorSemana(fechas: string[]): string[][] {
@@ -146,9 +146,26 @@ export default function Mensual() {
       <div className="flex flex-col gap-10">
         {semanas.map((fechas, i) => (
           <div key={i}>
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500 mb-2 no-print">
-              Semana {i + 1} — {formatFechaLarga(fechas[0])} al {formatFechaLarga(fechas[fechas.length - 1])}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2 no-print">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                Semana {i + 1} — {formatFechaLarga(fechas[0])} al {formatFechaLarga(fechas[fechas.length - 1])}
+              </p>
+              <button
+                onClick={() =>
+                  exportarExcelSemanal(
+                    org.asignaciones.filter((a) => fechas.includes(a.fecha)),
+                    `Organización de Alimentos — Semana ${i + 1}`,
+                    fechas[0],
+                    fechas[fechas.length - 1],
+                    orientacion
+                  )
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-base-300 px-2.5 py-1 text-xs font-medium text-ink-700 hover:bg-base-100 transition-colors"
+              >
+                <FileSpreadsheet size={13} />
+                Descargar solo esta semana
+              </button>
+            </div>
             <CarteleraView
               titulo={`Semana ${i + 1}`}
               fechaInicio={fechas[0]}
