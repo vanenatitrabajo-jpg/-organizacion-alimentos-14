@@ -1,18 +1,11 @@
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Upload,
-  FileSpreadsheet,
-  Loader2,
-  CheckCircle2,
-  AlertTriangle,
-  AlertCircle,
-} from 'lucide-react'
+import { Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { parsearExcel } from '../lib/excelParser'
 import { generarAsignaciones } from '../lib/motor'
 import { useOrgStore } from '../lib/store'
-import { AsignacionGenerada, Persona, Puesto, GRUPO_LABEL } from '../lib/types'
+import { AsignacionGenerada, Persona, CATEGORIA_LABEL } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
 
 export default function Importar() {
@@ -34,9 +27,7 @@ export default function Importar() {
     return {
       dias: fechas.size,
       personas: nombres.size,
-      automaticas: asignaciones.filter((a) => !a.conflicto).length,
-      conflictos: asignaciones.filter((a) => a.conflicto).length,
-      sinPreferencias: asignaciones.filter((a) => a.sinPreferenciasCargadas).length,
+      nuevas: asignaciones.filter((a) => a.esPersonaNueva).length,
     }
   }, [asignaciones])
 
@@ -52,21 +43,16 @@ export default function Importar() {
 
       if (filas.length === 0) {
         setError(
-          'No se detectó ninguna fila con "Alimentos" en el archivo. Revisá que la palabra aparezca en alguna columna (sector, actividad o servicio).'
+          'No se detectó ninguna fila con "Alimentos" en el archivo. Revisá que la palabra aparezca en la columna de sector/tarea de cada hoja.'
         )
         setProcesando(false)
         return
       }
 
-      const [personasRes, puestosRes] = await Promise.all([
-        supabase.from('personas').select('*'),
-        supabase.from('puestos').select('*').eq('activo', true),
-      ])
+      const { data } = await supabase.from('personas').select('*')
+      const personas = (data ?? []) as Persona[]
 
-      const personas = (personasRes.data ?? []) as Persona[]
-      const puestos = (puestosRes.data ?? []) as Puesto[]
-
-      const generadas = generarAsignaciones(filas, personas, puestos)
+      const generadas = generarAsignaciones(filas, personas)
       setAsignaciones(generadas)
     } catch {
       setError('No se pudo leer el archivo. Verificá que sea un Excel (.xlsx) válido.')
@@ -102,9 +88,10 @@ export default function Importar() {
       resumen: {
         diasEncontrados: resumen?.dias ?? 0,
         personasEncontradas: resumen?.personas ?? 0,
-        asignacionesAutomaticas: resumen?.automaticas ?? 0,
-        conflictos: resumen?.conflictos ?? 0,
-        sinPreferencias: resumen?.sinPreferencias ?? 0,
+        personasNuevas: resumen?.nuevas ?? 0,
+        asignacionesAutomaticas: 0,
+        conflictos: 0,
+        sinPreferencias: 0,
         revisionesNecesarias: 0,
       },
     }
@@ -137,8 +124,8 @@ export default function Importar() {
       <div className="mb-8">
         <h1 className="font-display text-2xl font-bold text-ink-900">Importar organización</h1>
         <p className="text-ink-500 mt-1">
-          Subí la planilla general del establecimiento. El sistema detecta automáticamente a
-          quienes están en Alimentos y los ubica en su puesto según sus preferencias.
+          Subí la planilla general (el mes completo o solo la semana). El sistema detecta cada
+          bloque "Alimentos" y ubica a cada persona en Menú u Office según el horario.
         </p>
       </div>
 
@@ -206,18 +193,17 @@ export default function Importar() {
               <FileSpreadsheet size={17} className="text-ink-700" />
               <p className="font-medium text-ink-900 text-sm">{archivo?.name}</p>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <Stat label="Días encontrados" value={resumen.dias} />
               <Stat label="Personas" value={resumen.personas} />
-              <Stat label="Ubicadas automáticamente" value={resumen.automaticas} tint="text-office-600" />
-              <Stat label="A revisar" value={resumen.conflictos} tint="text-red-600" />
+              <Stat label="Personas nuevas (revisar)" value={resumen.nuevas} tint="text-amber-500" />
             </div>
           </div>
 
           <div className="bg-white rounded-xl2 shadow-soft divide-y divide-base-200 overflow-hidden mb-6 max-h-[420px] overflow-y-auto">
             {asignaciones.map((a) => (
               <div key={a.id} className="flex items-start gap-3 px-5 py-3">
-                {a.conflicto ? (
+                {a.esPersonaNueva ? (
                   <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-500" />
                 ) : (
                   <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-office-600" />
@@ -225,11 +211,9 @@ export default function Importar() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-ink-900">
                     {a.nombre}
-                    {a.puestoNombre && a.grupo && (
-                      <span className="ml-2 text-xs font-medium text-ink-500">
-                        {a.puestoNombre} · {GRUPO_LABEL[a.grupo]}
-                      </span>
-                    )}
+                    <span className="ml-2 text-xs font-medium text-ink-500">
+                      {CATEGORIA_LABEL[a.categoria]} · {a.horarioTexto}
+                    </span>
                   </p>
                   <p className="text-xs text-ink-500 mt-0.5">
                     {formatFechaLarga(a.fecha)}
