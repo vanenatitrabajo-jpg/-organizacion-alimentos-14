@@ -1,11 +1,11 @@
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react'
+import { Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, AlertCircle, Plus, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { parsearExcel } from '../lib/excelParser'
 import { generarAsignaciones } from '../lib/motor'
 import { useOrgStore } from '../lib/store'
-import { AsignacionGenerada, Persona, CATEGORIA_LABEL } from '../lib/types'
+import { AsignacionGenerada, FilaCruda, Persona, CATEGORIA_LABEL } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
 
 const MESES = [
@@ -17,8 +17,11 @@ export default function Importar() {
   const navigate = useNavigate()
   const setActual = useOrgStore((s) => s.setActual)
   const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef2 = useRef<HTMLInputElement>(null)
 
   const [archivo, setArchivo] = useState<File | null>(null)
+  const [archivo2, setArchivo2] = useState<File | null>(null)
+  const [mostrarSegundo, setMostrarSegundo] = useState(false)
   const [procesando, setProcesando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [asignaciones, setAsignaciones] = useState<AsignacionGenerada[] | null>(null)
@@ -27,6 +30,8 @@ export default function Importar() {
   const hoy = new Date()
   const [mes, setMes] = useState(hoy.getMonth() + 1)
   const [anio, setAnio] = useState(hoy.getFullYear())
+  const [mes2, setMes2] = useState(hoy.getMonth() + 2 > 12 ? 1 : hoy.getMonth() + 2)
+  const [anio2, setAnio2] = useState(hoy.getMonth() + 2 > 12 ? hoy.getFullYear() + 1 : hoy.getFullYear())
 
   const resumen = useMemo(() => {
     if (!asignaciones) return null
@@ -39,14 +44,22 @@ export default function Importar() {
     }
   }, [asignaciones])
 
-  async function procesarArchivo(file: File) {
-    setArchivo(file)
+  async function procesarArchivos() {
+    if (!archivo) return
     setError(null)
     setAsignaciones(null)
     setProcesando(true)
 
     try {
-      const { filas, hojasConAlimentos } = await parsearExcel(file, mes, anio)
+      const resultado1 = await parsearExcel(archivo, mes, anio)
+      let filas: FilaCruda[] = resultado1.filas
+      let hojasConAlimentos = resultado1.hojasConAlimentos
+
+      if (archivo2) {
+        const resultado2 = await parsearExcel(archivo2, mes2, anio2)
+        filas = [...filas, ...resultado2.filas]
+        hojasConAlimentos += resultado2.hojasConAlimentos
+      }
 
       if (filas.length === 0) {
         setError(
@@ -64,7 +77,7 @@ export default function Importar() {
       const generadas = generarAsignaciones(filas, personas)
       setAsignaciones(generadas)
     } catch {
-      setError('No se pudo leer el archivo. Verificá que sea un Excel (.xlsx) válido.')
+      setError('No se pudo leer alguno de los archivos. Verificá que sean Excel (.xlsx) válidos.')
     } finally {
       setProcesando(false)
     }
@@ -72,13 +85,18 @@ export default function Importar() {
 
   function onFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (file) procesarArchivo(file)
+    if (file) setArchivo(file)
+  }
+
+  function onFileChange2(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) setArchivo2(file)
   }
 
   function onDrop(e: DragEvent) {
     e.preventDefault()
     const file = e.dataTransfer.files?.[0]
-    if (file) procesarArchivo(file)
+    if (file) setArchivo(file)
   }
 
   async function confirmarYVerOrganizacion(guardarEnHistorial: boolean) {
@@ -91,7 +109,7 @@ export default function Importar() {
       tipo,
       fechaInicio,
       fechaFin,
-      archivoOrigen: archivo?.name ?? 'archivo.xlsx',
+      archivoOrigen: [archivo?.name, archivo2?.name].filter(Boolean).join(' + ') || 'archivo.xlsx',
       asignaciones,
       notasPorDia: {},
       resumen: {
@@ -185,22 +203,91 @@ export default function Importar() {
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={onDrop}
-          className="bg-white rounded-xl2 shadow-card border-2 border-dashed border-base-300 p-12 flex flex-col items-center text-center cursor-pointer hover:border-cocina-400 transition-colors"
+          className="bg-white rounded-xl2 shadow-card border-2 border-dashed border-base-300 p-10 flex flex-col items-center text-center cursor-pointer hover:border-cocina-400 transition-colors"
           onClick={() => inputRef.current?.click()}
         >
           <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onFileChange} />
           <div className="w-14 h-14 rounded-2xl bg-cocina-50 flex items-center justify-center mb-4">
-            {procesando ? (
-              <Loader2 className="animate-spin text-cocina-600" size={24} />
-            ) : (
-              <Upload className="text-cocina-600" size={24} />
-            )}
+            <Upload className="text-cocina-600" size={24} />
           </div>
           <p className="font-medium text-ink-900">
-            {procesando ? 'Analizando el archivo…' : 'Arrastrá el Excel acá o hacé clic para elegirlo'}
+            {archivo ? archivo.name : 'Arrastrá el Excel acá o hacé clic para elegirlo'}
           </p>
           <p className="text-ink-500 text-sm mt-1">Archivos .xlsx — el archivo original nunca se modifica</p>
         </div>
+      )}
+
+      {!asignaciones && archivo && !mostrarSegundo && (
+        <button
+          type="button"
+          onClick={() => setMostrarSegundo(true)}
+          className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-cocina-600 hover:text-cocina-700"
+        >
+          <Plus size={15} />
+          ¿Una semana queda cortada entre dos meses? Agregá el archivo del otro mes
+        </button>
+      )}
+
+      {!asignaciones && mostrarSegundo && (
+        <div className="mt-4 bg-white rounded-xl2 shadow-soft p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-ink-900">Archivo del mes siguiente/anterior (opcional)</p>
+            <button
+              type="button"
+              onClick={() => {
+                setMostrarSegundo(false)
+                setArchivo2(null)
+              }}
+              className="text-ink-500 hover:text-ink-900"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-ink-500">Mes</span>
+              <select
+                value={mes2}
+                onChange={(e) => setMes2(Number(e.target.value))}
+                className="px-3 py-2 rounded-lg border border-base-300 bg-white text-sm"
+              >
+                {MESES.map((m, i) => (
+                  <option key={m} value={i + 1}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-ink-500">Año</span>
+              <input
+                type="number"
+                value={anio2}
+                onChange={(e) => setAnio2(Number(e.target.value))}
+                className="w-24 px-3 py-2 rounded-lg border border-base-300 bg-white text-sm"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => inputRef2.current?.click()}
+              className="px-4 py-2 rounded-lg border border-base-300 text-sm font-medium text-ink-700 hover:bg-base-100 transition-colors"
+            >
+              {archivo2 ? archivo2.name : 'Elegir archivo…'}
+            </button>
+            <input ref={inputRef2} type="file" accept=".xlsx,.xls" className="hidden" onChange={onFileChange2} />
+          </div>
+        </div>
+      )}
+
+      {!asignaciones && archivo && (
+        <button
+          onClick={procesarArchivos}
+          disabled={procesando}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ink-900 text-white px-5 py-2.5 text-sm font-medium hover:bg-ink-700 transition-colors disabled:opacity-50"
+        >
+          {procesando && <Loader2 className="animate-spin" size={15} />}
+          Analizar {archivo2 ? 'los 2 archivos' : 'archivo'}
+        </button>
       )}
 
       {error && (
@@ -226,7 +313,9 @@ export default function Importar() {
           <div className="bg-white rounded-xl2 shadow-soft p-6 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <FileSpreadsheet size={17} className="text-ink-700" />
-              <p className="font-medium text-ink-900 text-sm">{archivo?.name}</p>
+              <p className="font-medium text-ink-900 text-sm">
+                {[archivo?.name, archivo2?.name].filter(Boolean).join(' + ')}
+              </p>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <Stat label="Días encontrados" value={resumen.dias} />
@@ -278,6 +367,8 @@ export default function Importar() {
               onClick={() => {
                 setAsignaciones(null)
                 setArchivo(null)
+                setArchivo2(null)
+                setMostrarSegundo(false)
               }}
               className="rounded-lg px-5 py-2.5 text-sm font-medium text-ink-500 hover:bg-base-100 transition-colors"
             >
