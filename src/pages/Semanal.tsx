@@ -1,19 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import {
-  Search,
-  LayoutGrid,
-  Table2,
-  Printer,
-  FileSpreadsheet,
-  CalendarDays,
-  Loader2,
-  Undo2,
-  Save,
-} from 'lucide-react'
+import { Search, LayoutGrid, Table2, Printer, FileSpreadsheet, CalendarDays, Loader2, Undo2, Save } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../lib/store'
-import { OrganizacionGenerada, Puesto, GRUPO_LABEL, GRUPO_ORDEN, Grupo } from '../lib/types'
+import { OrganizacionGenerada, Categoria, CATEGORIA_LABEL, CATEGORIA_ORDEN } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
 import { exportarExcel } from '../lib/excelExport'
 import CarteleraView from '../components/CarteleraView'
@@ -29,18 +19,9 @@ export default function Semanal() {
   const [cargando, setCargando] = useState(!!id)
   const [vista, setVista] = useState<'digital' | 'cartelera'>('cartelera')
   const [busqueda, setBusqueda] = useState('')
-  const [filtroGrupo, setFiltroGrupo] = useState<Grupo | 'todos'>('todos')
-  const [puestos, setPuestos] = useState<Puesto[]>([])
+  const [filtroCategoria, setFiltroCategoria] = useState<Categoria | 'todos'>('todos')
   const [guardandoCambios, setGuardandoCambios] = useState(false)
   const [huboEdicion, setHuboEdicion] = useState(false)
-
-  useEffect(() => {
-    supabase
-      .from('puestos')
-      .select('*')
-      .eq('activo', true)
-      .then(({ data }) => data && setPuestos(data as Puesto[]))
-  }, [])
 
   useEffect(() => {
     if (!id) {
@@ -64,37 +45,18 @@ export default function Semanal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  function moverAsignacion(asignacionId: string, nuevoPuestoId: string) {
+  function moverAsignacion(asignacionId: string, nuevaCategoria: Categoria) {
     if (!org) return
     setHistorial((h) => [...h, org])
     setHuboEdicion(true)
 
-    const puesto = puestos.find((p) => p.id === nuevoPuestoId)
-    if (!puesto) return
-
     setOrg((prev) => {
       if (!prev) return prev
-      const asigMovida = prev.asignaciones.find((a) => a.id === asignacionId)
-      if (!asigMovida) return prev
-
-      const nuevas = prev.asignaciones.map((a) => {
-        // Si ya había alguien en el puesto destino ese día, lo deja "sin puesto".
-        if (a.id !== asignacionId && a.fecha === asigMovida.fecha && a.puestoId === nuevoPuestoId) {
-          return { ...a, puestoId: null, puestoNombre: null, grupo: null, conflicto: true }
-        }
-        if (a.id === asignacionId) {
-          return {
-            ...a,
-            puestoId: puesto.id,
-            puestoNombre: puesto.nombre,
-            grupo: puesto.grupo,
-            conflicto: false,
-            preferenciaUsada: null,
-            observaciones: 'Reasignado manualmente.',
-          }
-        }
-        return a
-      })
+      const nuevas = prev.asignaciones.map((a) =>
+        a.id === asignacionId
+          ? { ...a, categoria: nuevaCategoria, esPersonaNueva: false, observaciones: 'Reasignado manualmente.' }
+          : a
+      )
       const actualizada = { ...prev, asignaciones: nuevas }
       setActual(actualizada)
       return actualizada
@@ -131,11 +93,11 @@ export default function Semanal() {
   const asignacionesFiltradas = useMemo(() => {
     if (!org) return []
     return org.asignaciones.filter((a) => {
-      if (filtroGrupo !== 'todos' && a.grupo !== filtroGrupo) return false
+      if (filtroCategoria !== 'todos' && a.categoria !== filtroCategoria) return false
       if (busqueda.trim() && !a.nombre.toLowerCase().includes(busqueda.trim().toLowerCase())) return false
       return true
     })
-  }, [org, busqueda, filtroGrupo])
+  }, [org, busqueda, filtroCategoria])
 
   const dias = useMemo(() => {
     if (!org) return []
@@ -207,7 +169,7 @@ export default function Semanal() {
             {vista === 'digital' ? 'Vista cartelera' : 'Vista digital'}
           </button>
           <button
-            onClick={() => exportarExcel(org.asignaciones, puestos, 'Organización de Alimentos', org.fechaInicio, org.fechaFin)}
+            onClick={() => exportarExcel(org.asignaciones, 'Organización de Alimentos', org.fechaInicio, org.fechaFin)}
             className="inline-flex items-center gap-2 rounded-lg border border-base-300 px-3.5 py-2 text-sm font-medium text-ink-700 hover:bg-base-100 transition-colors"
           >
             <FileSpreadsheet size={15} />
@@ -234,15 +196,15 @@ export default function Semanal() {
           />
         </div>
         <div className="flex gap-1.5">
-          {(['todos', ...GRUPO_ORDEN] as const).map((g) => (
+          {(['todos', ...CATEGORIA_ORDEN] as const).map((c) => (
             <button
-              key={g}
-              onClick={() => setFiltroGrupo(g)}
+              key={c}
+              onClick={() => setFiltroCategoria(c)}
               className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                filtroGrupo === g ? 'bg-ink-900 text-white' : 'bg-white text-ink-700 border border-base-300'
+                filtroCategoria === c ? 'bg-ink-900 text-white' : 'bg-white text-ink-700 border border-base-300'
               }`}
             >
-              {g === 'todos' ? 'Todos' : GRUPO_LABEL[g]}
+              {c === 'todos' ? 'Todos' : CATEGORIA_LABEL[c]}
             </button>
           ))}
         </div>
@@ -254,7 +216,6 @@ export default function Semanal() {
             fechaInicio={org.fechaInicio}
             fechaFin={org.fechaFin}
             asignaciones={asignacionesFiltradas}
-            puestos={puestos}
             editable
             onMover={moverAsignacion}
             notasPorDia={org.notasPorDia}
@@ -267,13 +228,11 @@ export default function Semanal() {
         </div>
       )}
 
-      {/* Siempre disponible para impresión, sin importar la vista elegida en pantalla */}
       <div id="cartelera-print" className="hidden print:block">
         <CarteleraView
           fechaInicio={org.fechaInicio}
           fechaFin={org.fechaFin}
           asignaciones={org.asignaciones}
-          puestos={puestos}
           notasPorDia={org.notasPorDia}
         />
       </div>
@@ -281,13 +240,7 @@ export default function Semanal() {
   )
 }
 
-function VistaDigital({
-  dias,
-  asignaciones,
-}: {
-  dias: string[]
-  asignaciones: OrganizacionGenerada['asignaciones']
-}) {
+function VistaDigital({ dias, asignaciones }: { dias: string[]; asignaciones: OrganizacionGenerada['asignaciones'] }) {
   if (dias.length === 0) {
     return <p className="text-ink-500 text-sm">No hay asignaciones que coincidan con la búsqueda.</p>
   }
@@ -305,8 +258,8 @@ function VistaDigital({
               <thead>
                 <tr className="text-left text-ink-500 text-xs uppercase border-b border-base-200">
                   <th className="px-5 py-2 font-medium">Persona</th>
-                  <th className="px-5 py-2 font-medium">Puesto</th>
-                  <th className="px-5 py-2 font-medium">Bloque</th>
+                  <th className="px-5 py-2 font-medium">Categoría</th>
+                  <th className="px-5 py-2 font-medium">Horario</th>
                   <th className="px-5 py-2 font-medium">Observaciones</th>
                 </tr>
               </thead>
@@ -314,8 +267,8 @@ function VistaDigital({
                 {delDia.map((a) => (
                   <tr key={a.id} className="border-b border-base-100 last:border-0">
                     <td className="px-5 py-2.5 font-medium text-ink-900 whitespace-nowrap">{a.nombre}</td>
-                    <td className="px-5 py-2.5">{a.puestoNombre ?? <span className="text-amber-600">Sin asignar</span>}</td>
-                    <td className="px-5 py-2.5">{a.grupo ? GRUPO_LABEL[a.grupo] : '—'}</td>
+                    <td className="px-5 py-2.5">{CATEGORIA_LABEL[a.categoria]}</td>
+                    <td className="px-5 py-2.5 text-ink-500">{a.horarioTexto}</td>
                     <td className="px-5 py-2.5 text-ink-500 text-xs">{a.observaciones ?? ''}</td>
                   </tr>
                 ))}
