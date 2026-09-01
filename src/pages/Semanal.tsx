@@ -6,7 +6,7 @@ import { useOrgStore } from '../lib/store'
 import { OrganizacionGenerada, Categoria, CATEGORIA_LABEL, CATEGORIA_ORDEN } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
 import { compararHorarios } from '../lib/motor'
-import { exportarExcel } from '../lib/excelExport'
+import { exportarExcelSemanal, Orientacion } from '../lib/excelExport'
 import CarteleraView from '../components/CarteleraView'
 
 export default function Semanal() {
@@ -20,6 +20,7 @@ export default function Semanal() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<Categoria | 'todos'>('todos')
   const [guardandoCambios, setGuardandoCambios] = useState(false)
+  const [orientacion, setOrientacion] = useState<Orientacion>('portrait')
 
   useEffect(() => {
     if (!id) {
@@ -121,8 +122,28 @@ export default function Semanal() {
               Guardar observaciones
             </button>
           )}
+          <div className="inline-flex rounded-lg border border-base-300 overflow-hidden">
+            <button
+              onClick={() => setOrientacion('portrait')}
+              className={`px-2.5 py-2 text-xs font-medium transition-colors ${
+                orientacion === 'portrait' ? 'bg-ink-900 text-white' : 'bg-white text-ink-700'
+              }`}
+            >
+              Vertical
+            </button>
+            <button
+              onClick={() => setOrientacion('landscape')}
+              className={`px-2.5 py-2 text-xs font-medium transition-colors ${
+                orientacion === 'landscape' ? 'bg-ink-900 text-white' : 'bg-white text-ink-700'
+              }`}
+            >
+              Horizontal
+            </button>
+          </div>
           <button
-            onClick={() => exportarExcel(org.asignaciones, 'Organización de Alimentos', org.fechaInicio, org.fechaFin)}
+            onClick={() =>
+              exportarExcelSemanal(org.asignaciones, 'Organización de Alimentos', org.fechaInicio, org.fechaFin, orientacion)
+            }
             className="inline-flex items-center gap-2 rounded-lg border border-base-300 px-3.5 py-2 text-sm font-medium text-ink-700 hover:bg-base-100 transition-colors"
           >
             <FileSpreadsheet size={15} />
