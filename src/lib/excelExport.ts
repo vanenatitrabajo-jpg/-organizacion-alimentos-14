@@ -1,10 +1,11 @@
 import ExcelJS from 'exceljs'
 import { saveAs } from 'file-saver'
-import { AsignacionGenerada, CATEGORIA_COLOR_CLASSES, CATEGORIA_LABEL, CATEGORIA_ORDEN } from './types'
+import { AsignacionGenerada } from './types'
 import { formatFechaLarga } from './dateUtils'
 import { compararHorarios } from './motor'
 
-const HEADER_FILL = 'FF231F1A'
+const NEGRO = 'FF000000'
+const GRIS_CLARO = 'FFF2F2F2'
 
 export async function exportarExcel(
   asignaciones: AsignacionGenerada[],
@@ -20,12 +21,12 @@ export async function exportarExcel(
 
   const ws = wb.addWorksheet('Organización de Alimentos', {
     pageSetup: {
-      orientation: 'landscape',
-      paperSize: 9,
+      orientation: 'portrait',
+      paperSize: 9, // A4
       fitToPage: true,
       fitToWidth: 1,
-      fitToHeight: 0,
-      margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+      fitToHeight: 1,
+      margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
     },
   })
 
@@ -34,63 +35,64 @@ export async function exportarExcel(
   ws.mergeCells('A1:D1')
   const tituloCell = ws.getCell('A1')
   tituloCell.value = titulo.toUpperCase()
-  tituloCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } }
+  tituloCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: NEGRO } }
   tituloCell.alignment = { vertical: 'middle', horizontal: 'left' }
-  tituloCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } }
-  ws.getRow(1).height = 30
+  ws.getRow(1).height = 22
 
   ws.mergeCells('A2:D2')
   const subtitulo = ws.getCell('A2')
   subtitulo.value = `Del ${formatFechaLarga(fechaInicio)} al ${formatFechaLarga(fechaFin)}`
-  subtitulo.font = { name: 'Calibri', size: 11, italic: true, color: { argb: 'FF7A7367' } }
-  ws.getRow(2).height = 20
+  subtitulo.font = { name: 'Calibri', size: 9, italic: true, color: { argb: 'FF555555' } }
+  ws.getRow(2).height = 14
 
   ws.addRow([])
 
-  ws.columns = [{ width: 16 }, { width: 16 }, { width: 12 }, { width: 55 }]
+  ws.columns = [{ width: 13 }, { width: 12 }, { width: 30 }, { width: 30 }]
 
-  const headerRow = ws.addRow(['DÍA', 'HORARIO', 'SERVICIO', 'PERSONAL'])
+  const headerRow = ws.addRow(['DÍA', 'HORARIO', 'MENÚ', 'OFFICE'])
   headerRow.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_FILL } }
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NEGRO } }
     cell.alignment = { vertical: 'middle', horizontal: 'center' }
     cell.border = thinBorder()
   })
-  headerRow.height = 22
+  headerRow.height = 16
 
+  let alternar = false
   for (const fecha of dias) {
     const delDia = asignaciones.filter((a) => a.fecha === fecha)
     const horarios = Array.from(new Set(delDia.map((a) => a.horarioTexto))).sort(compararHorarios)
+    alternar = !alternar
 
     let primeraFilaDelDia = true
+    const filaInicioDia = ws.rowCount + 1
+
     for (const horario of horarios) {
-      for (const categoria of CATEGORIA_ORDEN) {
-        const deEsteGrupo = delDia.filter((a) => a.horarioTexto === horario && a.categoria === categoria)
-        if (deEsteGrupo.length === 0) continue
+      const menu = delDia
+        .filter((a) => a.horarioTexto === horario && a.categoria === 'menu')
+        .map((a) => a.nombre)
+        .join(', ')
+      const office = delDia
+        .filter((a) => a.horarioTexto === horario && a.categoria === 'office')
+        .map((a) => a.nombre)
+        .join(', ')
 
-        const estilo = CATEGORIA_COLOR_CLASSES[categoria]
-        const personal = deEsteGrupo.map((a) => a.nombre).join(', ')
+      const row = ws.addRow([primeraFilaDelDia ? formatFechaLarga(fecha).toUpperCase() : '', horario, menu || '—', office || '—'])
+      row.height = 14
 
-        const row = ws.addRow([
-          primeraFilaDelDia ? formatFechaLarga(fecha).toUpperCase() : '',
-          horario,
-          CATEGORIA_LABEL[categoria],
-          personal,
-        ])
-        row.height = 18
+      row.eachCell((cell, colNumber) => {
+        cell.border = thinBorder()
+        cell.alignment = { vertical: 'middle', horizontal: colNumber <= 2 ? 'center' : 'left', wrapText: true }
+        cell.font = { size: 8, bold: colNumber === 1, color: { argb: NEGRO } }
+        if (alternar) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_CLARO } }
+      })
 
-        row.eachCell((cell, colNumber) => {
-          cell.border = thinBorder()
-          cell.alignment = { vertical: 'middle', horizontal: colNumber <= 3 ? 'center' : 'left', wrapText: true }
-          if (colNumber === 1) cell.font = { bold: true, size: 11 }
-          if (colNumber === 3) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: estilo.fill } }
-            cell.font = { color: { argb: estilo.font }, bold: true, size: 10 }
-          }
-        })
+      primeraFilaDelDia = false
+    }
 
-        primeraFilaDelDia = false
-      }
+    if (horarios.length > 1) {
+      ws.mergeCells(`A${filaInicioDia}:A${ws.rowCount}`)
+      ws.getCell(`A${filaInicioDia}`).alignment = { vertical: 'middle', horizontal: 'center' }
     }
   }
 
@@ -103,6 +105,6 @@ export async function exportarExcel(
 }
 
 function thinBorder() {
-  const style = { style: 'thin' as const, color: { argb: 'FFE7E5DE' } }
+  const style = { style: 'thin' as const, color: { argb: 'FFBBBBBB' } }
   return { top: style, left: style, bottom: style, right: style }
 }
