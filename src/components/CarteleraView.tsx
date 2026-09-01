@@ -1,4 +1,4 @@
-import { AsignacionGenerada, CATEGORIA_COLOR_CLASSES, CATEGORIA_LABEL } from '../lib/types'
+import { AsignacionGenerada, Categoria, CATEGORIA_COLOR_CLASSES, CATEGORIA_LABEL, CATEGORIA_ORDEN } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
 import { compararHorarios } from '../lib/motor'
 
@@ -45,6 +45,35 @@ export default function CarteleraView({
   )
 }
 
+interface Grupo {
+  horario: string
+  categoria: Categoria
+  asignaciones: AsignacionGenerada[]
+}
+
+/**
+ * Agrupa por horario Y categoría (no solo por horario), porque un mismo
+ * bloque horario puede tener gente de Menú y gente de Office mezclada
+ * (cuando alguien tiene categoría fija que no coincide con lo que el
+ * horario sugeriría). Así cada fila muestra una sola categoría, correcta
+ * para toda la gente listada en ella.
+ */
+function agruparPorHorarioYCategoria(asignaciones: AsignacionGenerada[]): Grupo[] {
+  const horarios = Array.from(new Set(asignaciones.map((a) => a.horarioTexto))).sort(compararHorarios)
+  const grupos: Grupo[] = []
+
+  for (const horario of horarios) {
+    for (const categoria of CATEGORIA_ORDEN) {
+      const deEsteGrupo = asignaciones.filter((a) => a.horarioTexto === horario && a.categoria === categoria)
+      if (deEsteGrupo.length > 0) {
+        grupos.push({ horario, categoria, asignaciones: deEsteGrupo })
+      }
+    }
+  }
+
+  return grupos
+}
+
 function DiaCard({
   fecha,
   asignaciones,
@@ -56,9 +85,7 @@ function DiaCard({
   nota: string
   onNotaChange?: (texto: string) => void
 }) {
-  const horarios = Array.from(new Set(asignaciones.map((a) => a.horarioTexto))).sort(
-    compararHorarios
-  )
+  const grupos = agruparPorHorarioYCategoria(asignaciones)
 
   return (
     <div className="border border-base-200 rounded-xl2 overflow-hidden break-inside-avoid flex flex-col">
@@ -67,24 +94,25 @@ function DiaCard({
       </div>
 
       <div className="p-2 flex flex-col gap-1">
-        {horarios.map((horario) => {
-          const deEsteHorario = asignaciones.filter((a) => a.horarioTexto === horario)
-          const categoria = deEsteHorario[0]?.categoria ?? 'menu'
-          const estilo = CATEGORIA_COLOR_CLASSES[categoria]
+        {grupos.map((grupo) => {
+          const estilo = CATEGORIA_COLOR_CLASSES[grupo.categoria]
           return (
-            <div key={horario} className={`rounded-md border ${estilo.border} ${estilo.bg} px-2 py-1`}>
+            <div
+              key={`${grupo.horario}-${grupo.categoria}`}
+              className={`rounded-md border ${estilo.border} ${estilo.bg} px-2 py-1`}
+            >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-bold text-ink-700 shrink-0">{horario}</span>
+                <span className="text-[10px] font-bold text-ink-700 shrink-0">{grupo.horario}</span>
                 <span className={`text-[9px] font-bold uppercase tracking-wide ${estilo.text} shrink-0`}>
-                  {CATEGORIA_LABEL[categoria]}
+                  {CATEGORIA_LABEL[grupo.categoria]}
                 </span>
               </div>
               <p className="text-[11px] leading-snug text-ink-900 mt-0.5">
-                {deEsteHorario.map((a, i) => (
+                {grupo.asignaciones.map((a, i) => (
                   <span key={a.id} className={a.esPersonaNueva ? 'text-amber-600 font-semibold' : ''}>
                     {a.esPersonaNueva && '⚠ '}
                     {a.nombre}
-                    {i < deEsteHorario.length - 1 ? ', ' : ''}
+                    {i < grupo.asignaciones.length - 1 ? ', ' : ''}
                   </span>
                 ))}
               </p>
