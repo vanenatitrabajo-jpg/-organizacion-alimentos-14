@@ -26,7 +26,13 @@ export default function Importar() {
   const [error, setError] = useState<string | null>(null)
   const [asignaciones, setAsignaciones] = useState<AsignacionGenerada[] | null>(null)
   const [guardando, setGuardando] = useState(false)
-  const [tipo, setTipo] = useState<'semanal' | 'mensual'>('semanal')
+  const [tipo, setTipoState] = useState<'semanal' | 'mensual'>(
+    (localStorage.getItem('alimentos_tipo_preferido') as 'semanal' | 'mensual') || 'semanal'
+  )
+  function setTipo(t: 'semanal' | 'mensual') {
+    setTipoState(t)
+    localStorage.setItem('alimentos_tipo_preferido', t)
+  }
   const hoy = new Date()
   const [mes, setMes] = useState(hoy.getMonth() + 1)
   const [anio, setAnio] = useState(hoy.getFullYear())
