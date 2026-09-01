@@ -27,6 +27,15 @@ export function horarioAMinutos(horarioTexto: string): number | null {
   return h * 60 + m
 }
 
+/** Para usar como comparador en .sort(compararHorarios) — ordena por hora de inicio. */
+export function compararHorarios(a: string, b: string): number {
+  const ta = horarioAMinutos(a)
+  const tb = horarioAMinutos(b)
+  const va = ta === null ? 0 : ta
+  const vb = tb === null ? 0 : tb
+  return va - vb
+}
+
 /**
  * Regla confirmada:
  *  - Mañana (hasta ~12:15)      -> Menú
