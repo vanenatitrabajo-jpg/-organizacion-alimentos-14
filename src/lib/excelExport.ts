@@ -29,6 +29,13 @@ function bordeNegro() {
   return { top: linea, left: linea, bottom: linea, right: linea }
 }
 
+/** Estima cuántas líneas va a ocupar un texto al ajustarse (wrap) en una columna de cierto ancho. */
+function estimarLineas(texto: string, anchoColumna: number): number {
+  if (!texto) return 1
+  const caracteresPorLinea = Math.max(8, Math.floor(anchoColumna * 1.15))
+  return Math.max(1, Math.ceil(texto.length / caracteresPorLinea))
+}
+
 /**
  * Tabla clásica en blanco y negro: DÍA | HORARIO | MENÚ | OFFICE, una
  * sola fila por horario (nunca se repite), con el día fusionado
@@ -102,7 +109,9 @@ function agregarHojaSemana(
         .join(' · ')
 
       const row = ws.addRow([primeraFilaDelDia ? formatFechaLarga(fecha).toUpperCase() : '', horario, menu || '—', office || '—'])
-      row.height = 14
+      const lineasMenu = estimarLineas(menu, anchoServicio)
+      const lineasOffice = estimarLineas(office, anchoServicio)
+      row.height = 12 * Math.max(lineasMenu, lineasOffice) + 6
 
       row.eachCell((cell, colNumber) => {
         cell.border = bordeNegro()
