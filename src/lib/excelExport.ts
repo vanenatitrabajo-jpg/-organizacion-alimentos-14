@@ -5,6 +5,8 @@ import { formatFechaLarga } from './dateUtils'
 import { compararHorarios } from './motor'
 
 const NEGRO = 'FF000000'
+const BLANCO = 'FFFFFFFF'
+const GRIS_CLARO = 'FFF3F3F3'
 
 export type Orientacion = 'portrait' | 'landscape'
 
@@ -25,12 +27,13 @@ function agruparPorSemana(fechas: string[]): string[][] {
 }
 
 /**
- * Diseño en bloques: cada día es un título grande (sin repetirse en cada
- * fila), cada horario aparece una sola vez, y dentro de él una sola celda
- * junta MENÚ y OFFICE con sus nombres separados por "·" — así se evita
- * repetir día/horario/servicio y entra la semana completa en una A4.
- * Vertical (portrait) aprovecha mejor el espacio acá porque el contenido
- * tiene muchas filas (bloques de horario) y pocas columnas anchas.
+ * Cada día es una barra negra con texto blanco (imposible de no ver),
+ * y debajo una tabla de 3 columnas para ese día: HORARIO (fusionado
+ * verticalmente cuando Menú y Office comparten el mismo bloque, así no
+ * se repite) | SERVICIO (negrita, bien destacado) | PERSONAL.
+ * Blanco y negro, sin colores — el gris clarito es solo una franja
+ * alternada para que se siga con la vista más fácil, no un color de
+ * servicio.
  */
 function agregarHojaSemana(
   wb: ExcelJS.Workbook,
@@ -56,17 +59,17 @@ function agregarHojaSemana(
 
   ws.views = [{ showGridLines: false }]
 
-  const anchoContenido = orientacion === 'portrait' ? 62 : 95
-  ws.columns = [{ width: 15 }, { width: anchoContenido }]
+  const anchoPersonal = orientacion === 'portrait' ? 42 : 70
+  ws.columns = [{ width: 14 }, { width: 11 }, { width: anchoPersonal }]
 
-  ws.mergeCells('A1:B1')
+  ws.mergeCells('A1:C1')
   const tituloCell = ws.getCell('A1')
   tituloCell.value = titulo.toUpperCase()
   tituloCell.font = { name: 'Calibri', size: 15, bold: true, color: { argb: NEGRO } }
   tituloCell.alignment = { vertical: 'middle', horizontal: 'left' }
   ws.getRow(1).height = 22
 
-  ws.mergeCells('A2:B2')
+  ws.mergeCells('A2:C2')
   const subtitulo = ws.getCell('A2')
   subtitulo.value = `Del ${formatFechaLarga(fechaInicio)} al ${formatFechaLarga(fechaFin)}`
   subtitulo.font = { name: 'Calibri', size: 9, italic: true, color: { argb: 'FF555555' } }
@@ -74,49 +77,59 @@ function agregarHojaSemana(
 
   ws.addRow([])
 
+  let alternar = false
   for (const fecha of dias) {
     const delDia = asignaciones.filter((a) => a.fecha === fecha)
     const horarios = Array.from(new Set(delDia.map((a) => a.horarioTexto))).sort(compararHorarios)
+    alternar = !alternar
 
-    // --- Título del día: una sola fila grande, sin repetirse abajo ---
-    const filaDia = ws.addRow([formatFechaLarga(fecha).toUpperCase(), ''])
-    ws.mergeCells(`A${filaDia.number}:B${filaDia.number}`)
+    // --- Barra negra con el día, imposible de no ver ---
+    const filaDia = ws.addRow([formatFechaLarga(fecha).toUpperCase(), '', ''])
+    ws.mergeCells(`A${filaDia.number}:C${filaDia.number}`)
     const celdaDia = ws.getCell(`A${filaDia.number}`)
-    celdaDia.font = { size: 12, bold: true, color: { argb: NEGRO } }
-    celdaDia.alignment = { vertical: 'middle', horizontal: 'left' }
-    celdaDia.border = { bottom: { style: 'medium', color: { argb: NEGRO } } }
-    filaDia.height = 18
+    celdaDia.font = { size: 12, bold: true, color: { argb: BLANCO } }
+    celdaDia.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
+    celdaDia.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NEGRO } }
+    filaDia.height = 19
 
-    // --- Un bloque por horario: MENÚ y OFFICE juntos en una sola celda ---
+    // --- Tabla del día: Horario (fusionado) | Servicio | Personal ---
     for (const horario of horarios) {
-      const lineas: string[] = []
+      const filaInicioHorario = ws.rowCount + 1
+      let primeraFilaDelHorario = true
+
       for (const categoria of CATEGORIA_ORDEN) {
         const nombres = delDia
           .filter((a) => a.horarioTexto === horario && a.categoria === categoria)
           .map((a) => a.nombre)
-        if (nombres.length > 0) {
-          lineas.push(`${CATEGORIA_LABEL[categoria].toUpperCase()}: ${nombres.join(' · ')}`)
-        }
+        if (nombres.length === 0) continue
+
+        const row = ws.addRow([primeraFilaDelHorario ? horario : '', CATEGORIA_LABEL[categoria].toUpperCase(), nombres.join(' · ')])
+        row.height = 14
+
+        row.eachCell((cell, colNumber) => {
+          cell.border = { bottom: { style: 'hair', color: { argb: 'FFCCCCCC' } } }
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: colNumber === 3 ? 'left' : 'center',
+            wrapText: true,
+          }
+          if (colNumber === 1) cell.font = { size: 9, bold: true, color: { argb: NEGRO } }
+          if (colNumber === 2) cell.font = { size: 9, bold: true, color: { argb: NEGRO } }
+          if (colNumber === 3) cell.font = { size: 9, color: { argb: NEGRO } }
+          if (alternar) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_CLARO } }
+        })
+
+        primeraFilaDelHorario = false
       }
 
-      const row = ws.addRow([horario, lineas.join('\n')])
-      row.height = 12 * Math.max(1, lineas.length) + 6
-
-      const celdaHorario = row.getCell(1)
-      celdaHorario.font = { size: 9, bold: true, color: { argb: NEGRO } }
-      celdaHorario.alignment = { vertical: 'top', horizontal: 'left', wrapText: true }
-      celdaHorario.border = { bottom: { style: 'hair', color: { argb: 'FFCCCCCC' } } }
-
-      const celdaContenido = row.getCell(2)
-      celdaContenido.font = { size: 9, color: { argb: NEGRO } }
-      celdaContenido.alignment = { vertical: 'top', horizontal: 'left', wrapText: true }
-      celdaContenido.border = { bottom: { style: 'hair', color: { argb: 'FFCCCCCC' } } }
+      if (ws.rowCount > filaInicioHorario) {
+        ws.mergeCells(`A${filaInicioHorario}:A${ws.rowCount}`)
+        ws.getCell(`A${filaInicioHorario}`).alignment = { vertical: 'middle', horizontal: 'center' }
+      }
     }
-
-    ws.addRow([]).height = 4 // espacio chico entre días
   }
 
-  ws.pageSetup.printArea = `A1:B${ws.rowCount}`
+  ws.pageSetup.printArea = `A1:C${ws.rowCount}`
   ws.pageSetup.horizontalCentered = true
 }
 
