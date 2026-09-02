@@ -9,6 +9,8 @@ interface Props {
   asignaciones: AsignacionGenerada[]
   notasPorDia?: Record<string, string>
   onNotaChange?: (fecha: string, texto: string) => void
+  /** Cuando se pasa, permite resolver una persona nueva (⚠) eligiendo Menú u Office. */
+  onResolverNueva?: (nombre: string, categoria: Categoria) => void
 }
 
 export default function CarteleraView({
@@ -18,6 +20,7 @@ export default function CarteleraView({
   asignaciones,
   notasPorDia,
   onNotaChange,
+  onResolverNueva,
 }: Props) {
   const dias = Array.from(new Set(asignaciones.map((a) => a.fecha))).sort()
 
@@ -38,6 +41,7 @@ export default function CarteleraView({
             asignaciones={asignaciones.filter((a) => a.fecha === fecha)}
             nota={notasPorDia?.[fecha] ?? ''}
             onNotaChange={onNotaChange ? (texto) => onNotaChange(fecha, texto) : undefined}
+            onResolverNueva={onResolverNueva}
           />
         ))}
       </div>
@@ -79,11 +83,13 @@ function DiaCard({
   asignaciones,
   nota,
   onNotaChange,
+  onResolverNueva,
 }: {
   fecha: string
   asignaciones: AsignacionGenerada[]
   nota: string
   onNotaChange?: (texto: string) => void
+  onResolverNueva?: (nombre: string, categoria: Categoria) => void
 }) {
   const grupos = agruparPorHorarioYCategoria(asignaciones)
 
@@ -107,15 +113,37 @@ function DiaCard({
                   {CATEGORIA_LABEL[grupo.categoria]}
                 </span>
               </div>
-              <p className="text-[11px] leading-snug text-ink-900 mt-0.5">
+              <div className="text-[11px] leading-snug text-ink-900 mt-0.5 flex flex-wrap gap-x-1 gap-y-1">
                 {grupo.asignaciones.map((a, i) => (
-                  <span key={a.id} className={a.esPersonaNueva ? 'text-amber-600 font-semibold' : ''}>
-                    {a.esPersonaNueva && '⚠ '}
-                    {a.nombre}
-                    {i < grupo.asignaciones.length - 1 ? ', ' : ''}
+                  <span key={a.id} className="inline-flex items-center gap-1">
+                    <span className={a.esPersonaNueva ? 'text-amber-600 font-semibold' : ''}>
+                      {a.esPersonaNueva && '⚠ '}
+                      {a.nombre}
+                      {i < grupo.asignaciones.length - 1 ? ',' : ''}
+                    </span>
+                    {a.esPersonaNueva && onResolverNueva && (
+                      <span className="no-print inline-flex gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => onResolverNueva(a.nombre, 'menu')}
+                          className="text-[8px] font-bold px-1 py-0.5 rounded bg-emerald-500 text-white hover:bg-emerald-600"
+                          title="Poner en Menú"
+                        >
+                          Menú
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onResolverNueva(a.nombre, 'office')}
+                          className="text-[8px] font-bold px-1 py-0.5 rounded bg-sky-500 text-white hover:bg-sky-600"
+                          title="Poner en Office"
+                        >
+                          Office
+                        </button>
+                      </span>
+                    )}
                   </span>
                 ))}
-              </p>
+              </div>
             </div>
           )
         })}
