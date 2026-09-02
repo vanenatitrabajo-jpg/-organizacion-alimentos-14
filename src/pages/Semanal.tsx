@@ -44,6 +44,26 @@ export default function Semanal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  async function resolverPersonaNueva(nombre: string, categoria: Categoria) {
+    // 1) La agrega (o actualiza) en Personal de Alimentos con esa categoría
+    await supabase.from('personas').upsert({ nombre, categoria_fija: categoria }, { onConflict: 'nombre' })
+
+    // 2) Corrige todas sus apariciones en esta organización
+    setOrg((prev) => {
+      if (!prev) return prev
+      const actualizada = {
+        ...prev,
+        asignaciones: prev.asignaciones.map((a) =>
+          a.nombre === nombre
+            ? { ...a, categoria, esPersonaNueva: false, observaciones: 'Asignada manualmente.' }
+            : a
+        ),
+      }
+      setActual(actualizada)
+      return actualizada
+    })
+  }
+
   function cambiarNota(fecha: string, texto: string) {
     setOrg((prev) => {
       if (!prev) return prev
@@ -191,6 +211,7 @@ export default function Semanal() {
           asignaciones={asignacionesFiltradas}
           notasPorDia={org.notasPorDia}
           onNotaChange={cambiarNota}
+          onResolverNueva={resolverPersonaNueva}
         />
       </div>
 
