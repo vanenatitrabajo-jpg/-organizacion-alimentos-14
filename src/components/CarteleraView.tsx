@@ -101,7 +101,7 @@ function DiaCard({
   const grupos = agruparPorHorarioYCategoria(asignaciones)
 
   return (
-    <div className="border border-base-200 rounded-xl2 overflow-hidden break-inside-avoid flex flex-col">
+    <div className="border border-base-200 print:border-2 print:border-ink-900 rounded-xl2 overflow-hidden break-inside-avoid flex flex-col">
       <div className="bg-ink-900 text-white px-3 py-1.5">
         <p className="font-display font-bold text-xs uppercase tracking-wide">{formatFechaLarga(fecha)}</p>
       </div>
@@ -112,7 +112,7 @@ function DiaCard({
           return (
             <div
               key={`${grupo.horario}-${grupo.categoria}`}
-              className={`rounded-md border ${estilo.border} ${estilo.bg} px-2 py-1`}
+              className={`rounded-md border ${estilo.border} ${estilo.bg} print:border print:border-ink-700 px-2 py-1`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-bold text-ink-700 shrink-0">{grupo.horario}</span>
@@ -120,7 +120,7 @@ function DiaCard({
                   {CATEGORIA_LABEL[grupo.categoria]}
                 </span>
               </div>
-              <div className="text-[11px] leading-snug text-ink-900 mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-1">
+              <div className="text-[11px] print:text-xs leading-snug text-ink-900 mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-1">
                 {grupo.asignaciones.map((a, i) => (
                   <span key={a.id} className="inline-flex items-center gap-0.5">
                     {a.esPersonaNueva && <span className="text-amber-600 font-semibold">⚠</span>}
@@ -131,9 +131,17 @@ function DiaCard({
                         className={`text-[11px] ${a.esPersonaNueva ? 'text-amber-600 font-semibold' : 'text-ink-900'}`}
                       />
                     ) : (
-                      <span className={a.esPersonaNueva ? 'text-amber-600 font-semibold' : ''}>{a.nombre}</span>
+                      <span
+                        className={
+                          a.esPersonaNueva ? 'text-amber-600 font-semibold' : 'text-ink-900 font-semibold print:font-bold'
+                        }
+                      >
+                        {a.nombre}
+                      </span>
                     )}
-                    {a.horaEspecifica && <span className="text-ink-500">({a.horaEspecifica})</span>}
+                    {a.horaEspecifica && (
+                      <span className="text-ink-500 print:text-ink-800 print:font-medium">({a.horaEspecifica})</span>
+                    )}
                     {i < grupo.asignaciones.length - 1 ? ',' : ''}
                     {a.esPersonaNueva && onResolverNueva && (
                       <span className="no-print inline-flex gap-0.5">
