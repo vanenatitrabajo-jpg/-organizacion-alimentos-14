@@ -1,6 +1,7 @@
 import { AsignacionGenerada, Categoria, CATEGORIA_COLOR_CLASSES, CATEGORIA_LABEL, CATEGORIA_ORDEN } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
 import { compararHorarios } from '../lib/motor'
+import EditableNombre from './EditableNombre'
 
 interface Props {
   titulo?: string
@@ -11,6 +12,8 @@ interface Props {
   onNotaChange?: (fecha: string, texto: string) => void
   /** Cuando se pasa, permite resolver una persona nueva (⚠) eligiendo Menú u Office. */
   onResolverNueva?: (nombre: string, categoria: Categoria) => void
+  /** Cuando se pasa, permite editar el nombre de una persona directo en el cuadro. */
+  onNombreChange?: (id: string, nuevoNombre: string) => void
 }
 
 export default function CarteleraView({
@@ -21,6 +24,7 @@ export default function CarteleraView({
   notasPorDia,
   onNotaChange,
   onResolverNueva,
+  onNombreChange,
 }: Props) {
   const dias = Array.from(new Set(asignaciones.map((a) => a.fecha))).sort()
 
@@ -42,6 +46,7 @@ export default function CarteleraView({
             nota={notasPorDia?.[fecha] ?? ''}
             onNotaChange={onNotaChange ? (texto) => onNotaChange(fecha, texto) : undefined}
             onResolverNueva={onResolverNueva}
+            onNombreChange={onNombreChange}
           />
         ))}
       </div>
@@ -84,12 +89,14 @@ function DiaCard({
   nota,
   onNotaChange,
   onResolverNueva,
+  onNombreChange,
 }: {
   fecha: string
   asignaciones: AsignacionGenerada[]
   nota: string
   onNotaChange?: (texto: string) => void
   onResolverNueva?: (nombre: string, categoria: Categoria) => void
+  onNombreChange?: (id: string, nuevoNombre: string) => void
 }) {
   const grupos = agruparPorHorarioYCategoria(asignaciones)
 
@@ -113,14 +120,21 @@ function DiaCard({
                   {CATEGORIA_LABEL[grupo.categoria]}
                 </span>
               </div>
-              <div className="text-[11px] leading-snug text-ink-900 mt-0.5 flex flex-wrap gap-x-1 gap-y-1">
+              <div className="text-[11px] leading-snug text-ink-900 mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-1">
                 {grupo.asignaciones.map((a, i) => (
-                  <span key={a.id} className="inline-flex items-center gap-1">
-                    <span className={a.esPersonaNueva ? 'text-amber-600 font-semibold' : ''}>
-                      {a.esPersonaNueva && '⚠ '}
-                      {a.nombre}
-                      {i < grupo.asignaciones.length - 1 ? ',' : ''}
-                    </span>
+                  <span key={a.id} className="inline-flex items-center gap-0.5">
+                    {a.esPersonaNueva && <span className="text-amber-600 font-semibold">⚠</span>}
+                    {onNombreChange ? (
+                      <EditableNombre
+                        value={a.nombre}
+                        onChange={(nuevo) => onNombreChange(a.id, nuevo)}
+                        className={`text-[11px] ${a.esPersonaNueva ? 'text-amber-600 font-semibold' : 'text-ink-900'}`}
+                      />
+                    ) : (
+                      <span className={a.esPersonaNueva ? 'text-amber-600 font-semibold' : ''}>{a.nombre}</span>
+                    )}
+                    {a.horaEspecifica && <span className="text-ink-500">({a.horaEspecifica})</span>}
+                    {i < grupo.asignaciones.length - 1 ? ',' : ''}
                     {a.esPersonaNueva && onResolverNueva && (
                       <span className="no-print inline-flex gap-0.5">
                         <button
