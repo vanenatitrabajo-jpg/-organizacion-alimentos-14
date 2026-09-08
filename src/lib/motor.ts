@@ -71,17 +71,13 @@ function nuevoId() {
 export function generarAsignaciones(filas: FilaCruda[], personas: Persona[]): AsignacionGenerada[] {
   const vistos = new Set<string>() // `${fecha}__${horario normalizado}__${nombre normalizado}`
   const resultado: AsignacionGenerada[] = []
-
   for (const fila of filas) {
     if (!fila.fecha || !fila.nombre) continue
-
     const clave = `${fila.fecha}__${normalizar(fila.horarioTexto)}__${normalizar(fila.nombre)}`
     if (vistos.has(clave)) continue
     vistos.add(clave)
-
     const persona = encontrarPersona(fila.nombre, personas)
     const categoria = persona?.categoria_fija ?? categoriaPorHorario(fila.horarioTexto)
-
     resultado.push({
       id: nuevoId(),
       fecha: fila.fecha,
@@ -92,8 +88,8 @@ export function generarAsignaciones(filas: FilaCruda[], personas: Persona[]): As
       horarioTexto: fila.horarioTexto,
       esPersonaNueva: !persona,
       observaciones: !persona ? 'No está en "Personal de Alimentos" — revisar y agregar.' : null,
+      horaEspecifica: fila.horaEspecifica ?? null,
     })
   }
-
   return resultado
 }
