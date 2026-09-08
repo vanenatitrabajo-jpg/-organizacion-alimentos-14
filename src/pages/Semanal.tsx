@@ -3,11 +3,12 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { Search, Printer, FileSpreadsheet, CalendarDays, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../lib/store'
-import { OrganizacionGenerada, Categoria, CATEGORIA_LABEL, CATEGORIA_ORDEN } from '../lib/types'
+import { OrganizacionGenerada, Categoria, CATEGORIA_LABEL, CATEGORIA_ORDEN, AsignacionGenerada } from '../lib/types'
 import { formatFechaLarga } from '../lib/dateUtils'
 import { compararHorarios } from '../lib/motor'
 import { exportarExcelSemanal, Orientacion } from '../lib/excelExport'
 import CarteleraView from '../components/CarteleraView'
+import EditableNombre from '../components/EditableNombre'
 
 export default function Semanal() {
   const [params] = useSearchParams()
@@ -58,6 +59,18 @@ export default function Semanal() {
             ? { ...a, categoria, esPersonaNueva: false, observaciones: 'Asignada manualmente.' }
             : a
         ),
+      }
+      setActual(actualizada)
+      return actualizada
+    })
+  }
+
+  function cambiarNombre(id: string, nuevoNombre: string) {
+    setOrg((prev) => {
+      if (!prev) return prev
+      const actualizada = {
+        ...prev,
+        asignaciones: prev.asignaciones.map((a) => (a.id === id ? { ...a, nombre: nuevoNombre } : a)),
       }
       setActual(actualizada)
       return actualizada
@@ -212,11 +225,12 @@ export default function Semanal() {
           notasPorDia={org.notasPorDia}
           onNotaChange={cambiarNota}
           onResolverNueva={resolverPersonaNueva}
+          onNombreChange={cambiarNombre}
         />
       </div>
 
       <div className="print:hidden">
-        <VistaDigital dias={dias} asignaciones={asignacionesFiltradas} />
+        <VistaDigital dias={dias} asignaciones={asignacionesFiltradas} onNombreChange={cambiarNombre} />
       </div>
 
       <div id="cartelera-print" className="hidden print:block">
@@ -225,6 +239,7 @@ export default function Semanal() {
           fechaFin={org.fechaFin}
           asignaciones={org.asignaciones}
           notasPorDia={org.notasPorDia}
+          onNombreChange={cambiarNombre}
         />
       </div>
     </div>
@@ -234,7 +249,7 @@ export default function Semanal() {
 interface FilaTabla {
   horario: string
   categoria: Categoria
-  nombres: string
+  asignaciones: AsignacionGenerada[]
 }
 
 function agruparParaTabla(delDia: OrganizacionGenerada['asignaciones']): FilaTabla[] {
@@ -244,14 +259,22 @@ function agruparParaTabla(delDia: OrganizacionGenerada['asignaciones']): FilaTab
     for (const categoria of CATEGORIA_ORDEN) {
       const deEsteGrupo = delDia.filter((a) => a.horarioTexto === horario && a.categoria === categoria)
       if (deEsteGrupo.length > 0) {
-        filas.push({ horario, categoria, nombres: deEsteGrupo.map((a) => a.nombre).join(', ') })
+        filas.push({ horario, categoria, asignaciones: deEsteGrupo })
       }
     }
   }
   return filas
 }
 
-function VistaDigital({ dias, asignaciones }: { dias: string[]; asignaciones: OrganizacionGenerada['asignaciones'] }) {
+function VistaDigital({
+  dias,
+  asignaciones,
+  onNombreChange,
+}: {
+  dias: string[]
+  asignaciones: OrganizacionGenerada['asignaciones']
+  onNombreChange: (id: string, nuevoNombre: string) => void
+}) {
   if (dias.length === 0) {
     return <p className="text-ink-500 text-sm">No hay asignaciones que coincidan con la búsqueda.</p>
   }
@@ -279,7 +302,17 @@ function VistaDigital({ dias, asignaciones }: { dias: string[]; asignaciones: Or
                   <tr key={idx} className="border-b border-base-100 last:border-0">
                     <td className="px-5 py-2.5 font-medium text-ink-900 whitespace-nowrap">{fila.horario}</td>
                     <td className="px-5 py-2.5 whitespace-nowrap">{CATEGORIA_LABEL[fila.categoria]}</td>
-                    <td className="px-5 py-2.5">{fila.nombres}</td>
+                    <td className="px-5 py-2.5">
+                      <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+                        {fila.asignaciones.map((a, i) => (
+                          <span key={a.id} className="inline-flex items-center gap-0.5">
+                            <EditableNombre value={a.nombre} onChange={(nuevo) => onNombreChange(a.id, nuevo)} />
+                            {a.horaEspecifica && <span className="text-ink-500 text-xs">({a.horaEspecifica})</span>}
+                            {i < fila.asignaciones.length - 1 ? ',' : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
