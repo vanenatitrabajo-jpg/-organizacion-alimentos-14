@@ -42,6 +42,7 @@ export default function Mensual() {
   const [cargando, setCargando] = useState(!!id)
   const [orientacion, setOrientacion] = useState<Orientacion>('portrait')
   const [semanaSeleccionada, setSemanaSeleccionada] = useState(0)
+  const [guardandoCambios, setGuardandoCambios] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -61,6 +62,25 @@ export default function Mensual() {
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  function cambiarNombre(idAsignacion: string, nuevoNombre: string) {
+    setOrg((prev) => {
+      if (!prev) return prev
+      const actualizada = {
+        ...prev,
+        asignaciones: prev.asignaciones.map((a) => (a.id === idAsignacion ? { ...a, nombre: nuevoNombre } : a)),
+      }
+      setActual(actualizada)
+      return actualizada
+    })
+  }
+
+  async function guardarCambios() {
+    if (!org?.id) return
+    setGuardandoCambios(true)
+    await supabase.from('organizaciones').update({ datos: org }).eq('id', org.id)
+    setGuardandoCambios(false)
+  }
 
   const semanas = useMemo(() => {
     if (!org) return []
@@ -111,6 +131,16 @@ export default function Mensual() {
             {semanas.length === 1 ? '' : 's'}
           </p>
         </div>
+        {org.id && (
+          <button
+            onClick={guardarCambios}
+            disabled={guardandoCambios}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 text-white px-3.5 py-2 text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
+          >
+            {guardandoCambios && <Loader2 className="animate-spin" size={15} />}
+            Guardar cambios
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl2 shadow-soft p-4 mb-6 no-print flex flex-wrap items-center gap-3">
@@ -193,6 +223,7 @@ export default function Mensual() {
           fechaFin={fechasSemana[fechasSemana.length - 1]}
           asignaciones={asignacionesSemana}
           notasPorDia={org.notasPorDia}
+          onNombreChange={cambiarNombre}
         />
       </div>
 
