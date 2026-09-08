@@ -70,6 +70,8 @@ export interface FilaCruda {
   horarioTexto: string // ej "12:50 a 14:30"
   nombreCrudo: string // tal cual apareció en la celda (puede traer horario embebido)
   nombre: string // limpio, sin horario embebido
+  /** Horario puntual que traía pegado el nombre en la celda, ej "16:15Carmen" -> "16:15". null si no tenía. */
+  horaEspecifica: string | null
 }
 
 /** Una persona ya ubicada en Menú u Office, un día concreto. */
@@ -84,6 +86,8 @@ export interface AsignacionGenerada {
   /** true si el nombre no coincide con nadie en "Personal de Alimentos" — hay que revisar. */
   esPersonaNueva: boolean
   observaciones: string | null
+  /** Horario puntual de esta persona ese día, si el Excel lo traía (ej "16:15"). Se muestra entre paréntesis, sin tocar horarioTexto. */
+  horaEspecifica: string | null
 }
 
 export interface OrganizacionGenerada {
