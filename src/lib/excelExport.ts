@@ -36,6 +36,11 @@ function estimarLineas(texto: string, anchoColumna: number): number {
   return Math.max(1, Math.ceil(texto.length / caracteresPorLinea))
 }
 
+/** Nombre listo para mostrar: agrega el horario puntual entre paréntesis si lo tiene. */
+function formatearNombre(a: AsignacionGenerada): string {
+  return a.nombre + (a.horaEspecifica ? ` (${a.horaEspecifica})` : '')
+}
+
 /**
  * Tabla clásica en blanco y negro: DÍA | HORARIO | MENÚ | OFFICE, una
  * sola fila por horario (nunca se repite), con el día fusionado
@@ -101,11 +106,11 @@ function agregarHojaSemana(
     for (const horario of horarios) {
       const menu = delDia
         .filter((a) => a.horarioTexto === horario && a.categoria === 'menu')
-        .map((a) => a.nombre)
+        .map(formatearNombre)
         .join(' · ')
       const office = delDia
         .filter((a) => a.horarioTexto === horario && a.categoria === 'office')
-        .map((a) => a.nombre)
+        .map(formatearNombre)
         .join(' · ')
 
       const row = ws.addRow([primeraFilaDelDia ? formatFechaLarga(fecha).toUpperCase() : '', horario, menu || '—', office || '—'])
