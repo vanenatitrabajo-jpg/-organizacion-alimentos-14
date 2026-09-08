@@ -25,14 +25,31 @@ function celdaComoTexto(valor: unknown): string {
   return String(valor).trim()
 }
 
+interface NombreExtraido {
+  nombre: string
+  /** Horario puntual que traía pegado el nombre en la celda, ej "16:15Carmen" -> "16:15". */
+  horaEspecifica: string | null
+}
+
 /**
- * Limpia un nombre que puede traer un horario pegado, y separa nombres
- * unidos por guión (una misma celda a veces trae "Dai-Nini"), ej:
- * "11:30 Isa" -> ["Isa"], "Rocioh/18" -> ["Rocio"], "Dai-Nini" -> ["Dai","Nini"].
+ * Limpia un nombre que puede traer un horario pegado (con o sin espacio,
+ * ej "16:15Carmen" o "16:15 Carmen"), separa nombres unidos por guión
+ * (una misma celda a veces trae "Dai-Nini"), y devuelve el horario
+ * específico detectado por separado (sin descartarlo), ej:
+ * "16:15Carmen" -> [{ nombre: "Carmen", horaEspecifica: "16:15" }]
+ * "11:30 Isa" -> [{ nombre: "Isa", horaEspecifica: "11:30" }]
+ * "Dai-Nini" -> [{ nombre: "Dai", horaEspecifica: null }, { nombre: "Nini", horaEspecifica: null }]
  */
-function limpiarYSepararNombres(crudo: string): string[] {
+function limpiarYSepararNombres(crudo: string): NombreExtraido[] {
   let n = crudo.trim()
-  n = n.replace(/^\d{1,2}[:.]\d{2}\s*/, '')
+
+  let horaEspecifica: string | null = null
+  const matchHora = n.match(/^(\d{1,2}[:.]\d{2})\s*/)
+  if (matchHora) {
+    horaEspecifica = matchHora[1].replace('.', ':')
+    n = n.slice(matchHora[0].length)
+  }
+
   n = n.replace(/h?\s*\/?\s*\d{1,2}(?:[:.]\d{2})?\s*$/i, '')
   n = n.replace(/\bhs?\b\.?/gi, '')
   n = n.replace(/[¿?()]/g, '')
@@ -41,7 +58,8 @@ function limpiarYSepararNombres(crudo: string): string[] {
     .split('-')
     .map((p) => p.trim())
     .filter(Boolean)
-  return partes.length > 0 ? partes : n ? [n] : []
+  const nombres = partes.length > 0 ? partes : n ? [n] : []
+  return nombres.map((nombre) => ({ nombre, horaEspecifica }))
 }
 
 function esNombreValido(n: string): boolean {
@@ -151,7 +169,7 @@ export async function parsearExcel(file: File, mes: number, anio: number): Promi
         const crudo = celdaComoTexto(row[i])
         if (!crudo) continue
 
-        for (const nombre of limpiarYSepararNombres(crudo)) {
+        for (const { nombre, horaEspecifica } of limpiarYSepararNombres(crudo)) {
           if (!esNombreValido(nombre)) continue
           filas.push({
             id: nuevoId(),
@@ -161,6 +179,7 @@ export async function parsearExcel(file: File, mes: number, anio: number): Promi
             horarioTexto: horarioActual || '(sin horario)',
             nombreCrudo: crudo,
             nombre,
+            horaEspecifica,
           })
         }
       }
